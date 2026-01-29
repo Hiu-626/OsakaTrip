@@ -26,7 +26,8 @@ import {
   ArrowDown,
   ChevronUp,
   ChevronDown,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 import { Booking, TripMember, ScheduleItem } from '../types';
 import { GoogleGenAI } from "@google/genai";
@@ -618,6 +619,13 @@ const BookingFormModal: React.FC<{
         setImagePreview(compressedBase64);
         setFormData(prev => ({ ...prev, imageUrl: compressedBase64 }));
 
+        if (!process.env.API_KEY) {
+           console.error("No API Key found");
+           alert("未偵測到 API Key。請確認您已在 Vercel 設定環境變數 API_KEY。");
+           setIsScanning(false);
+           return;
+        }
+
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const base64Data = compressedBase64.split(',')[1]; 
 
@@ -667,6 +675,7 @@ const BookingFormModal: React.FC<{
 
       } catch (error) {
         console.error("Scan failed", error);
+        alert("掃描失敗或 API Key 無效");
       } finally {
         setIsScanning(false);
       }
@@ -713,6 +722,12 @@ const BookingFormModal: React.FC<{
             <div className="flex flex-col items-center text-navy/20 w-full h-full justify-center group-hover:bg-stitch/5 transition-colors">
               <Camera size={40} className="mb-2" />
               <p className="text-[10px] font-black uppercase">Snap Ticket & Auto-Scan</p>
+              <div className="flex items-center gap-1 mt-1">
+                 {!process.env.API_KEY && <AlertTriangle size={10} className="text-red-400" />}
+                 <p className={`text-[8px] font-bold uppercase ${!process.env.API_KEY ? 'text-red-400' : 'text-stitch'}`}>
+                    {process.env.API_KEY ? 'AI Powered' : 'No API Key'}
+                 </p>
+              </div>
             </div>
           )}
           <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
