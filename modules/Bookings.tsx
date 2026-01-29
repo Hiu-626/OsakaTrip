@@ -25,7 +25,8 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Download
 } from 'lucide-react';
 import { Booking, TripMember, ScheduleItem } from '../types';
 import { GoogleGenAI } from "@google/genai";
@@ -291,8 +292,19 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     const hasImage = !!booking.imageUrl;
     const linkedItem = itinerary.find(i => i.id === booking.linkedScheduleId);
 
+    // Helper for conditional rendering - Hides empty fields
+    const DetailField = ({ label, value, fullWidth = false, className = '' }: { label: string, value: any, fullWidth?: boolean, className?: string }) => {
+       if (!value || value === '') return null;
+       return (
+         <div className={`${fullWidth ? 'col-span-2' : ''} ${className}`}>
+            <p className="text-[9px] font-black text-navy/30 uppercase tracking-widest mb-0.5">{label}</p>
+            <p className="font-bold text-navy text-sm break-words leading-tight">{String(value)}</p>
+         </div>
+       );
+    };
+
     return (
-      <div className="animate-in fade-in duration-300 bg-white">
+      <div className="animate-in fade-in duration-300 bg-white rounded-b-2xl-sticker overflow-hidden">
         
         {/* LINKED SCHEDULE BANNER */}
         {linkedItem && (
@@ -310,39 +322,43 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
           </div>
         )}
 
-        {/* HERO SECTION: IMAGE / QR CODE */}
-        <div className="p-4 flex flex-col items-center justify-center bg-white">
-           {hasImage ? (
-             <div className="w-full rounded-xl border-2 border-navy/5 p-1 shadow-inner bg-cream">
-                <img src={booking.imageUrl} alt="Voucher" className="w-full h-auto max-h-[300px] object-contain rounded-lg mix-blend-multiply" />
+        {/* IMAGE SECTION - Only show if exists */}
+        {hasImage && (
+             <div className="p-4 bg-white">
+                 <div className="w-full rounded-xl border-2 border-navy/5 p-1 shadow-inner bg-cream relative group">
+                    <img src={booking.imageUrl} alt="Voucher" className="w-full h-auto max-h-[300px] object-contain rounded-lg mix-blend-multiply" />
+                    <a 
+                      href={booking.imageUrl} 
+                      download={`ticket-${booking.title.replace(/\s+/g, '_')}.jpg`} 
+                      onClick={e => e.stopPropagation()} 
+                      className="absolute bottom-2 right-2 p-2 bg-white/80 rounded-full shadow-sm text-navy/40 hover:text-navy opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Download Image"
+                    >
+                      <Download size={14} />
+                    </a>
+                 </div>
              </div>
-           ) : (
-             <div className="w-full h-32 bg-cream rounded-xl border-2 border-dashed border-accent flex flex-col items-center justify-center text-navy/20">
-                <QrCode size={40} />
-                <p className="text-[10px] font-black uppercase mt-2">No Ticket Image</p>
-             </div>
-           )}
-           <p className="text-[9px] font-bold text-navy/30 uppercase mt-2 tracking-widest">Present at Entry</p>
+        )}
+        
+        {/* Perforated Line - Separator */}
+        <div className="relative h-4 w-full bg-white overflow-hidden -mt-1 mb-1">
+            <div className="absolute top-1/2 left-0 w-full border-t-2 border-dashed border-accent/40"></div>
+            <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-cream rounded-full border-r border-accent/20"></div>
+            <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-cream rounded-full border-l border-accent/20"></div>
         </div>
 
-        {/* Perforated Line Effect */}
-        <div className="relative h-4 w-full bg-white overflow-hidden my-2">
-            <div className="absolute top-1/2 left-0 w-full border-t-2 border-dashed border-accent/60"></div>
-            <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-cream rounded-full"></div>
-            <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-cream rounded-full"></div>
-        </div>
-
-        {/* DETAILS SECTION */}
-        <div className="p-5 pt-0">
-          {/* Reference Number */}
+        {/* DETAILS BODY */}
+        <div className="p-5 pt-2 pb-6">
+          
+          {/* Reference Number - Prominent */}
           {booking.referenceNo && (
             <div 
               onClick={(e) => copyToClipboard(e, booking.referenceNo!)}
-              className="flex items-center justify-between p-3 bg-cream rounded-xl border border-accent/50 mb-6 cursor-pointer active:scale-[0.98] transition-transform group"
+              className="flex items-center justify-between p-3 bg-cream/50 rounded-xl border border-accent/30 mb-5 cursor-pointer active:scale-[0.99] transition-transform group hover:border-stitch/30"
             >
                <div>
                   <p className="text-[9px] font-black uppercase text-navy/30 tracking-widest">Booking Ref</p>
-                  <p className="text-2xl font-black text-navy font-mono tracking-wider">{booking.referenceNo}</p>
+                  <p className="text-xl font-black text-navy font-mono tracking-wider">{booking.referenceNo}</p>
                </div>
                <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm text-stitch group-hover:scale-110 transition-transform">
                   <Copy size={14} />
@@ -350,35 +366,70 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
             </div>
           )}
 
-          {/* Details Grid */}
-          <div className="grid grid-cols-2 gap-y-4 gap-x-6">
+          <div className="grid grid-cols-2 gap-y-5 gap-x-4">
+            
+            {/* FLIGHT SPECIFIC LAYOUT */}
             {booking.type === 'Flight' && (
               <>
-                <div><p className="text-[9px] font-black text-navy/30 uppercase">From</p><p className="text-lg font-black text-navy">{booking.details.from}</p></div>
-                <div><p className="text-[9px] font-black text-navy/30 uppercase">To</p><p className="text-lg font-black text-navy">{booking.details.to}</p></div>
-                <div><p className="text-[9px] font-black text-navy/30 uppercase">Departs</p><p className="text-lg font-black text-navy">{booking.details.time}</p></div>
-                <div><p className="text-[9px] font-black text-navy/30 uppercase">Arrives</p><p className="text-lg font-black text-navy">{booking.details.arrivalTime || '-'}</p></div>
-                <div><p className="text-[9px] font-black text-navy/30 uppercase">Gate</p><p className="text-lg font-black text-navy">{booking.details.gate || '-'}</p></div>
-                <div><p className="text-[9px] font-black text-navy/30 uppercase">Seat</p><p className="text-lg font-black text-navy">{booking.details.seat || '-'}</p></div>
+                {/* Route Visual */}
+                {(booking.details.from || booking.details.to) && (
+                   <div className="col-span-2 flex items-center gap-4 p-3 rounded-xl border border-accent/30 bg-white shadow-sm mb-1">
+                      <div className="flex-1 min-w-0">
+                         <p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">From</p>
+                         <p className="text-xl font-black text-navy truncate">{booking.details.from}</p>
+                         <p className="text-[10px] font-bold text-navy/40">{booking.details.time}</p>
+                      </div>
+                      <div className="flex flex-col items-center gap-1 opacity-20">
+                         <Plane size={20} className="rotate-90 text-navy" />
+                         <div className="w-12 border-t-2 border-dashed border-navy"></div>
+                      </div>
+                      <div className="flex-1 text-right min-w-0">
+                         <p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">To</p>
+                         <p className="text-xl font-black text-navy truncate">{booking.details.to}</p>
+                         <p className="text-[10px] font-bold text-navy/40">{booking.details.arrivalTime}</p>
+                      </div>
+                   </div>
+                )}
+                
+                <DetailField label="Airline" value={booking.details.airline} />
+                <DetailField label="Flight No" value={booking.details.flightNo} />
+                <DetailField label="Gate" value={booking.details.gate} />
+                <DetailField label="Seat" value={booking.details.seat} />
+                <DetailField label="Class" value={booking.details.class} />
               </>
             )}
 
+            {/* HOTEL / CAR LAYOUT */}
             {(booking.type === 'Hotel' || booking.type === 'Car') && (
                <>
-                 <div className="col-span-2"><p className="text-[9px] font-black text-navy/30 uppercase">Address</p><p className="font-bold text-navy">{booking.details.address}</p></div>
-                 <div><p className="text-[9px] font-black text-navy/30 uppercase">Start</p><p className="font-bold text-navy">{booking.details.checkIn}</p></div>
-                 <div><p className="text-[9px] font-black text-navy/30 uppercase">End</p><p className="font-bold text-navy">{booking.details.checkOut}</p></div>
+                 <DetailField label="Address / Location" value={booking.details.address} fullWidth />
+                 
+                 {(booking.details.checkIn || booking.details.checkOut) && (
+                   <div className="col-span-2 bg-cream/30 p-3 rounded-xl border border-accent/30 flex gap-4">
+                      <div className="flex-1">
+                         <p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">{booking.type === 'Car' ? 'Pick-up' : 'Check-In'}</p>
+                         <p className="font-bold text-navy">{booking.details.checkIn}</p>
+                      </div>
+                      <div className="w-px bg-accent/30"></div>
+                      <div className="flex-1">
+                         <p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">{booking.type === 'Car' ? 'Drop-off' : 'Check-Out'}</p>
+                         <p className="font-bold text-navy">{booking.details.checkOut}</p>
+                      </div>
+                   </div>
+                 )}
+                 
+                 <DetailField label="Room / Vehicle" value={booking.details.room || booking.details.vehicle} fullWidth />
                </>
             )}
 
+            {/* GENERIC FIELDS (Filter empty & specific keys) */}
             {Object.entries(booking.details).map(([key, value]) => {
-                if (['from', 'to', 'gate', 'seat', 'checkIn', 'checkOut', 'address', 'imageUrl', 'arrivalTime', 'time', 'date'].includes(key)) return null;
-                return (
-                  <div key={key} className={String(value).length > 20 ? 'col-span-2' : ''}>
-                     <p className="text-[9px] font-black text-navy/30 uppercase">{key}</p>
-                     <p className="font-bold text-navy break-words">{String(value)}</p>
-                  </div>
-                )
+                const ignoredKeys = [
+                    'from', 'to', 'gate', 'seat', 'checkIn', 'checkOut', 'address', 'imageUrl', 
+                    'arrivalTime', 'time', 'date', 'airline', 'flightNo', 'class', 'room', 'vehicle'
+                ];
+                if (ignoredKeys.includes(key)) return null;
+                return <DetailField key={key} label={key} value={value} fullWidth={String(value).length > 20} />;
              })}
           </div>
 
