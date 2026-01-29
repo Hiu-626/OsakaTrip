@@ -21,6 +21,7 @@ type Tab = 'schedule' | 'bookings' | 'expense' | 'journal' | 'planning';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('schedule');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>(new Date().toLocaleTimeString());
   const [members, setMembers] = useState<TripMember[]>(() => {
     const saved = localStorage.getItem('trip_members');
@@ -75,6 +76,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handleNavigate = (tab: Tab, id?: string) => {
+    setActiveTab(tab);
+    if (id) {
+      setHighlightId(id);
+      // Clear highlight after a delay to allow re-highlighting if needed, 
+      // but strictly Bookings will handle it via useEffect on prop change.
+      // Keeping it simple for now.
+    }
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'schedule': return (
@@ -85,9 +96,17 @@ const App: React.FC = () => {
           onAddMember={handleAddMember}
           onDeleteMember={handleDeleteMember}
           onSwitchUser={handleSwitchUser}
+          onNavigate={handleNavigate}
         />
       );
-      case 'bookings': return <Bookings members={members} currentUser={currentUser} />;
+      case 'bookings': return (
+        <Bookings 
+          members={members} 
+          currentUser={currentUser} 
+          onNavigate={handleNavigate}
+          highlightId={highlightId}
+        />
+      );
       case 'expense': return <Expense currentUser={currentUser} members={members} />;
       case 'journal': return <Journal currentUser={currentUser} members={members} />;
       case 'planning': return <Planning members={members} />;
@@ -99,6 +118,7 @@ const App: React.FC = () => {
           onAddMember={handleAddMember}
           onDeleteMember={handleDeleteMember}
           onSwitchUser={handleSwitchUser}
+          onNavigate={handleNavigate}
         />
       );
     }
@@ -123,11 +143,11 @@ const App: React.FC = () => {
 
       {/* Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-paper/90 backdrop-blur-lg border-t border-accent px-2 py-3 flex justify-around items-center z-50 rounded-t-3xl shadow-[0_-4px_10px_rgba(0,0,0,0.05)] safe-bottom">
-        <NavButton active={activeTab === 'schedule'} onClick={() => setActiveTab('schedule')} icon={<Calendar size={22} />} label="行程" />
-        <NavButton active={activeTab === 'bookings'} onClick={() => setActiveTab('bookings')} icon={<Ticket size={22} />} label="票券" />
-        <NavButton active={activeTab === 'expense'} onClick={() => setActiveTab('expense')} icon={<Wallet size={22} />} label="記帳" />
-        <NavButton active={activeTab === 'journal'} onClick={() => setActiveTab('journal')} icon={<Camera size={22} />} label="日誌" />
-        <NavButton active={activeTab === 'planning'} onClick={() => setActiveTab('planning')} icon={<CheckSquare size={22} />} label="清單" />
+        <NavButton active={activeTab === 'schedule'} onClick={() => handleNavigate('schedule')} icon={<Calendar size={22} />} label="行程" />
+        <NavButton active={activeTab === 'bookings'} onClick={() => handleNavigate('bookings')} icon={<Ticket size={22} />} label="票券" />
+        <NavButton active={activeTab === 'expense'} onClick={() => handleNavigate('expense')} icon={<Wallet size={22} />} label="記帳" />
+        <NavButton active={activeTab === 'journal'} onClick={() => handleNavigate('journal')} icon={<Camera size={22} />} label="日誌" />
+        <NavButton active={activeTab === 'planning'} onClick={() => handleNavigate('planning')} icon={<CheckSquare size={22} />} label="清單" />
       </nav>
     </div>
   );

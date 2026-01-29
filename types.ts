@@ -28,6 +28,7 @@ export interface Booking {
   details: any;
   cost: number;
   imageUrl?: string;
+  linkedScheduleId?: string; // ID of the related ScheduleItem
 }
 
 export interface Expense {
