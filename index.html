@@ -1,0 +1,100 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ohana Trip">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#F8F9F5">
+  <link rel="apple-touch-icon" href="https://picsum.photos/seed/stitch/192/192">
+  <title>Ohana Trip Planner | 史迪奇 × 唐老鴨版</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            stitch: '#6EC1E4',
+            donald: '#FFD966',
+            navy: '#1F3C88',
+            cream: '#F8F9F5',
+            paper: '#FFFFFF',
+            accent: '#E0E5D5'
+          },
+          fontFamily: {
+            sans: ['Quicksand', 'sans-serif'],
+          },
+          borderRadius: {
+            'xl-sticker': '1.25rem',
+            '2xl-sticker': '1.5rem',
+            '3xl-sticker': '2rem',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --sat: env(safe-area-inset-top);
+      --sab: env(safe-area-inset-bottom);
+    }
+    body {
+      background-color: #F8F9F5;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: contain;
+      user-select: none;
+      padding-top: var(--sat);
+      padding-bottom: var(--sab);
+    }
+    .sticker-shadow {
+      box-shadow: 4px 4px 0px #E0E5D5;
+    }
+    .ticket-edge {
+      mask-image: radial-gradient(circle at 0 50%, transparent 10px, black 11px), radial-gradient(circle at 100% 50%, transparent 10px, black 11px);
+    }
+    ::-webkit-scrollbar {
+      display: none;
+    }
+    input, textarea {
+      user-select: text;
+    }
+    .safe-bottom {
+      padding-bottom: calc(1.5rem + var(--sab));
+    }
+    /* 柔和動畫 */
+    .animate-float {
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "jspdf": "https://esm.sh/jspdf@^2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@^1.4.1"
+  }
+}
+</script>
+</head>
+<body class="font-sans text-navy">
+  <div id="root"></div>
+  <script type="module" src="./index.tsx"></script>
+</body>
+</html>
