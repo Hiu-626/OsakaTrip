@@ -14,7 +14,10 @@ import {
   CalendarDays,
   ArrowRight,
   Navigation,
-  Ticket as TicketIcon
+  Ticket as TicketIcon,
+  Download,
+  Upload,
+  FileJson
 } from 'lucide-react';
 import { TripConfig, ScheduleItem, Category, TripMember, Booking } from '../types';
 import { COLORS } from '../constants';
@@ -77,6 +80,9 @@ const Schedule: React.FC<ScheduleProps> = ({
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [isPoolDragOver, setIsPoolDragOver] = useState(false);
   const [swipeId, setSwipeId] = useState<string | null>(null);
+  
+  // Ref for file import
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { localStorage.setItem('tripConfig', JSON.stringify(config)); }, [config]);
   useEffect(() => { localStorage.setItem('itinerary', JSON.stringify(itinerary)); }, [itinerary]);
@@ -238,6 +244,69 @@ const Schedule: React.FC<ScheduleProps> = ({
     e.stopPropagation();
     const query = encodeURIComponent(location);
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+  };
+
+  // Export Data Logic
+  const handleExportData = () => {
+    const backupData = {
+      tripConfig: localStorage.getItem('tripConfig'),
+      itinerary: localStorage.getItem('itinerary'),
+      inspiration_pool: localStorage.getItem('inspiration_pool'),
+      trip_members: localStorage.getItem('trip_members'),
+      bookings: localStorage.getItem('bookings'),
+      expenses: localStorage.getItem('expenses'),
+      journal_posts: localStorage.getItem('journal_posts'),
+      planning_items: localStorage.getItem('planning_items'),
+      baseCurrency: localStorage.getItem('baseCurrency'),
+      timestamp: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(backupData)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `OhanaTrip_Backup_${config.tripName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Import Data Logic
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (window.confirm('⚠️ 警告：匯入行程檔案將會「完全覆蓋」目前所有的行程、記帳與票券資料。\n\n確定要載入備份檔案嗎？')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const rawResult = event.target?.result as string;
+          const data = JSON.parse(rawResult);
+
+          // Restore Keys if they exist
+          if (data.tripConfig) localStorage.setItem('tripConfig', data.tripConfig);
+          if (data.itinerary) localStorage.setItem('itinerary', data.itinerary);
+          if (data.inspiration_pool) localStorage.setItem('inspiration_pool', data.inspiration_pool);
+          if (data.trip_members) localStorage.setItem('trip_members', data.trip_members);
+          if (data.bookings) localStorage.setItem('bookings', data.bookings);
+          if (data.expenses) localStorage.setItem('expenses', data.expenses);
+          if (data.journal_posts) localStorage.setItem('journal_posts', data.journal_posts);
+          if (data.planning_items) localStorage.setItem('planning_items', data.planning_items);
+          if (data.baseCurrency) localStorage.setItem('baseCurrency', data.baseCurrency);
+
+          alert('✅ 匯入成功！App 將重新啟動以載入新行程。');
+          window.location.reload();
+        } catch (error) {
+          console.error('Import failed', error);
+          alert('❌ 匯入失敗：檔案格式錯誤或損毀。');
+        }
+      };
+      reader.readAsText(file);
+    }
+    
+    // Reset Input
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
@@ -488,7 +557,7 @@ const Schedule: React.FC<ScheduleProps> = ({
                <h3 className="text-xl font-black text-navy uppercase tracking-wider">Settings</h3>
                <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
             </div>
-            <div className="overflow-y-auto pr-2 space-y-6 flex-1">
+            <div className="overflow-y-auto pr-2 space-y-6 flex-1 pb-4">
                <div className="space-y-4">
                  <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em]">General</h4>
                  <div><label className="text-[10px] uppercase text-navy/40 block">Region</label><input type="text" value={config.region} onChange={e => setConfig({...config, region: e.target.value})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent" /></div>
@@ -514,6 +583,46 @@ const Schedule: React.FC<ScheduleProps> = ({
                     <input type="text" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="New Name" className="flex-1 p-3 bg-white border border-accent rounded-xl text-sm font-bold" />
                     <button onClick={handleAddMemberSubmit} disabled={!newMemberName.trim()} className="px-4 bg-navy text-white rounded-xl font-black"><Plus size={20} /></button>
                  </div>
+               </div>
+
+               {/* Data Backup & Restore Section */}
+               <div className="space-y-4 pt-4 border-t border-accent/40">
+                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em] flex items-center gap-2">
+                   <FileJson size={12} /> Data Backup
+                 </h4>
+                 <div className="grid grid-cols-2 gap-3">
+                   {/* Export Button */}
+                   <button 
+                      onClick={handleExportData}
+                      className="flex flex-col items-center justify-center gap-2 p-4 bg-navy/5 border-2 border-navy/10 rounded-2xl hover:bg-stitch/10 hover:border-stitch/30 transition-colors active:scale-95"
+                   >
+                      <div className="p-2 bg-white rounded-full text-navy shadow-sm">
+                        <Download size={18} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-navy">Export Trip</span>
+                   </button>
+
+                   {/* Import Button */}
+                   <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center gap-2 p-4 bg-donald/10 border-2 border-donald/20 rounded-2xl hover:bg-donald/20 hover:border-donald/40 transition-colors active:scale-95"
+                   >
+                      <div className="p-2 bg-white rounded-full text-navy shadow-sm">
+                        <Upload size={18} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-navy">Import Trip</span>
+                      <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleImportData} 
+                        accept=".json"
+                        className="hidden" 
+                      />
+                   </button>
+                 </div>
+                 <p className="text-[9px] text-navy/30 text-center px-4 leading-tight">
+                   Backup your itinerary to share with friends or restore on another device.
+                 </p>
                </div>
             </div>
           </div>
