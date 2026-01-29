@@ -19,9 +19,16 @@ import {
   Sparkles,
   MapPin,
   ArrowUpRight,
-  QrCode
+  QrCode,
+  Wand2,
+  CopyPlus,
+  ArrowUp,
+  ArrowDown,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { Booking, TripMember, ScheduleItem } from '../types';
+import { GoogleGenAI } from "@google/genai";
 
 interface BookingsProps {
   members: TripMember[];
@@ -42,7 +49,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
         bookedBy: '1',
         cost: 0,
         imageUrl: 'https://picsum.photos/seed/flight/600/200',
-        details: { from: 'HKG', to: 'NRT', date: '12 OCT', time: '09:15', seat: '24A', gate: 'B12', airline: 'Cathay' }
+        details: { from: 'HKG', to: 'NRT', date: '12 OCT', time: '09:15', arrivalTime: '14:30', seat: '24A', gate: 'B12', airline: 'Cathay' }
       },
       {
         id: '2',
@@ -57,7 +64,6 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     ];
   });
 
-  // Load itinerary for linking
   const [itinerary] = useState<ScheduleItem[]>(() => {
     const saved = localStorage.getItem('itinerary');
     return saved ? JSON.parse(saved) : [];
@@ -66,6 +72,9 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+  // Search State
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterUser, setFilterUser] = useState<string | 'All'>('All');
 
@@ -73,11 +82,8 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     localStorage.setItem('bookings', JSON.stringify(bookings));
   }, [bookings]);
 
-  // Handle highlight request from props
   useEffect(() => {
-    if (highlightId) {
-       setExpandedId(highlightId);
-    }
+    if (highlightId) setExpandedId(highlightId);
   }, [highlightId]);
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
@@ -92,6 +98,35 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     e.stopPropagation();
     setEditingBooking(booking); 
     setIsModalOpen(true);
+  };
+
+  const handleDuplicate = (e: React.MouseEvent, booking: Booking) => {
+    e.stopPropagation();
+    const newBooking: Booking = {
+      ...booking,
+      id: Date.now().toString(),
+      title: `${booking.title} (Copy)`,
+    };
+    const index = bookings.findIndex(b => b.id === booking.id);
+    const newBookings = [...bookings];
+    newBookings.splice(index + 1, 0, newBooking);
+    setBookings(newBookings);
+  };
+
+  const handleMove = (e: React.MouseEvent, id: string, direction: 'up' | 'down') => {
+    e.stopPropagation();
+    const index = bookings.findIndex(b => b.id === id);
+    if (index === -1) return;
+
+    const newBookings = [...bookings];
+    if (direction === 'up') {
+      if (index === 0) return;
+      [newBookings[index - 1], newBookings[index]] = [newBookings[index], newBookings[index - 1]];
+    } else {
+      if (index === newBookings.length - 1) return;
+      [newBookings[index + 1], newBookings[index]] = [newBookings[index], newBookings[index + 1]];
+    }
+    setBookings(newBookings);
   };
 
   const handleSave = (booking: Booking) => {
@@ -117,13 +152,12 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
         (b.referenceNo && b.referenceNo.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchesUser = filterUser === 'All' || b.bookedBy === filterUser;
-
       return matchesSearch && matchesUser;
     });
   }, [bookings, searchTerm, filterUser]);
 
-  // Helper to render the visible "Tab" strip when stacked
-  const renderHeaderStrip = (booking: Booking, isExpanded: boolean) => {
+  // Updated Header Strip: Info moved to TOP for visibility when stacked
+  const renderHeaderStrip = (booking: Booking, isExpanded: boolean, index: number, total: number) => {
     const bookedByMember = members.find(m => m.id === booking.bookedBy);
     
     let icon = <TicketIcon size={18} />;
@@ -170,47 +204,84 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
         break;
     }
 
-    // Determine key date/time info for the header
+    // Determine key date/time info
     const displayTime = booking.details.time || booking.details.checkIn || booking.details.datetime?.split('T')[1] || '';
     const displayDate = booking.details.date || booking.details.checkIn || booking.details.datetime?.split('T')[0] || '';
+    const arrivalTime = booking.details.arrivalTime;
 
     return (
-      <div className={`p-4 flex flex-col justify-between ${bgColor} ${textColor} transition-colors relative overflow-hidden min-h-[90px]`}>
+      <div className={`flex relative min-h-[100px] ${bgColor} ${textColor} transition-colors overflow-hidden`}>
         {/* Decorative Elements */}
-        {booking.type === 'Flight' && <div className="absolute right-0 top-0 bottom-0 w-24 bg-white/10 -skew-x-12 translate-x-10" />}
-        {booking.type === 'Amusement' && <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #fff 2px, transparent 2.5px)', backgroundSize: '12px 12px'}} />}
-        
-        {/* Top Row: Type & Icon */}
-        <div className="flex justify-between items-start mb-1 relative z-10">
-           <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-sm ${accentColor === 'bg-white' ? 'bg-white/80' : accentColor}`}>
-                {icon}
-              </div>
-              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${booking.type === 'Flight' ? 'bg-white/20' : 'bg-navy/5'}`}>
-                {booking.type}
-              </span>
-           </div>
-           
-           {/* Booked By Avatar Small */}
-           {bookedByMember && (
-             <img src={bookedByMember.avatar} className="w-6 h-6 rounded-full border border-white shadow-sm" />
-           )}
+        {booking.type === 'Flight' && <div className="absolute right-0 top-0 bottom-0 w-32 bg-white/10 -skew-x-12 translate-x-10 pointer-events-none" />}
+        {booking.type === 'Amusement' && <div className="absolute inset-0 opacity-10 pointer-events-none" style={{backgroundImage: 'radial-gradient(circle, #fff 2px, transparent 2.5px)', backgroundSize: '12px 12px'}} />}
+
+        {/* Main Content Area */}
+        <div className="flex-1 p-4 flex flex-col relative z-10">
+          {/* TOP ROW: Key Info (Visible when stacked) */}
+          <div className="flex justify-between items-start mb-2">
+             <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-sm ${accentColor === 'bg-white' ? 'bg-white/80' : accentColor}`}>
+                  {icon}
+                </div>
+                <div className="flex flex-col">
+                  <span className={`text-[9px] font-black uppercase tracking-widest opacity-60`}>
+                    {booking.type}
+                  </span>
+                  {/* Date is critical, show it at top */}
+                  <span className="text-xs font-black leading-none">{displayDate}</span>
+                </div>
+             </div>
+             
+             {/* Time Display */}
+             <div className="text-right">
+                {booking.type === 'Flight' && arrivalTime ? (
+                  <div className="flex flex-col items-end">
+                     <div className="flex items-center gap-1">
+                        <span className="text-sm font-black">{displayTime}</span>
+                        <span className="opacity-50 text-[10px]">➔</span>
+                        <span className="text-sm font-black">{arrivalTime}</span>
+                     </div>
+                  </div>
+                ) : (
+                  <p className="text-lg font-black">{displayTime}</p>
+                )}
+             </div>
+          </div>
+
+          {/* MID ROW: Title */}
+          <div className="flex-1">
+             <h3 className="font-black text-lg leading-tight truncate pr-2">{booking.title}</h3>
+             {booking.referenceNo && (
+                <span className="flex items-center gap-1 text-[9px] font-bold opacity-60 mt-0.5">
+                  <Hash size={8} /> {booking.referenceNo}
+                </span>
+             )}
+          </div>
         </div>
 
-        {/* Bottom Row: Title & Time - Main Info */}
-        <div className="flex justify-between items-end relative z-10">
-           <div className="flex-1 min-w-0 pr-4">
-              <h3 className="font-black text-lg leading-tight truncate">{booking.title}</h3>
-              {booking.referenceNo && (
-                 <span className={`flex items-center gap-1 text-[9px] font-bold opacity-60 mt-0.5`}>
-                   <Hash size={8} /> {booking.referenceNo}
-                 </span>
-              )}
-           </div>
-           <div className="text-right flex-shrink-0">
-              {displayDate && <p className="text-[9px] font-bold opacity-60 uppercase">{displayDate}</p>}
-              {displayTime && <p className="text-sm font-black">{displayTime}</p>}
-           </div>
+        {/* RIGHT SIDE: Sorting Controls (Hidden strip) */}
+        <div className={`w-10 flex flex-col items-center justify-center gap-1 border-l ${booking.type === 'Flight' ? 'border-white/10 bg-black/10' : 'border-black/5 bg-black/5'}`} onClick={e => e.stopPropagation()}>
+           <button 
+              onClick={(e) => handleMove(e, booking.id, 'up')}
+              disabled={index === 0}
+              className={`p-1.5 rounded-full hover:bg-white/20 active:scale-90 disabled:opacity-20 transition-all`}
+           >
+              <ChevronUp size={14} strokeWidth={3} />
+           </button>
+           <button 
+              onClick={(e) => handleDuplicate(e, booking)}
+              className="p-1.5 rounded-full hover:bg-white/20 active:scale-90 transition-all"
+              title="Duplicate"
+           >
+              <CopyPlus size={12} />
+           </button>
+           <button 
+              onClick={(e) => handleMove(e, booking.id, 'down')}
+              disabled={index === total - 1}
+              className={`p-1.5 rounded-full hover:bg-white/20 active:scale-90 disabled:opacity-20 transition-all`}
+           >
+              <ChevronDown size={14} strokeWidth={3} />
+           </button>
         </div>
       </div>
     );
@@ -239,7 +310,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
           </div>
         )}
 
-        {/* HERO SECTION: IMAGE / QR CODE (Admission Priority) */}
+        {/* HERO SECTION: IMAGE / QR CODE */}
         <div className="p-4 flex flex-col items-center justify-center bg-white">
            {hasImage ? (
              <div className="w-full rounded-xl border-2 border-navy/5 p-1 shadow-inner bg-cream">
@@ -263,7 +334,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
 
         {/* DETAILS SECTION */}
         <div className="p-5 pt-0">
-          {/* Reference Number Copy Block */}
+          {/* Reference Number */}
           {booking.referenceNo && (
             <div 
               onClick={(e) => copyToClipboard(e, booking.referenceNo!)}
@@ -279,12 +350,14 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
             </div>
           )}
 
-          {/* Type Specific Grid */}
+          {/* Details Grid */}
           <div className="grid grid-cols-2 gap-y-4 gap-x-6">
             {booking.type === 'Flight' && (
               <>
                 <div><p className="text-[9px] font-black text-navy/30 uppercase">From</p><p className="text-lg font-black text-navy">{booking.details.from}</p></div>
                 <div><p className="text-[9px] font-black text-navy/30 uppercase">To</p><p className="text-lg font-black text-navy">{booking.details.to}</p></div>
+                <div><p className="text-[9px] font-black text-navy/30 uppercase">Departs</p><p className="text-lg font-black text-navy">{booking.details.time}</p></div>
+                <div><p className="text-[9px] font-black text-navy/30 uppercase">Arrives</p><p className="text-lg font-black text-navy">{booking.details.arrivalTime || '-'}</p></div>
                 <div><p className="text-[9px] font-black text-navy/30 uppercase">Gate</p><p className="text-lg font-black text-navy">{booking.details.gate || '-'}</p></div>
                 <div><p className="text-[9px] font-black text-navy/30 uppercase">Seat</p><p className="text-lg font-black text-navy">{booking.details.seat || '-'}</p></div>
               </>
@@ -298,9 +371,8 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
                </>
             )}
 
-            {/* General Fields for others */}
             {Object.entries(booking.details).map(([key, value]) => {
-                if (['from', 'to', 'gate', 'seat', 'checkIn', 'checkOut', 'address', 'imageUrl'].includes(key)) return null;
+                if (['from', 'to', 'gate', 'seat', 'checkIn', 'checkOut', 'address', 'imageUrl', 'arrivalTime', 'time', 'date'].includes(key)) return null;
                 return (
                   <div key={key} className={String(value).length > 20 ? 'col-span-2' : ''}>
                      <p className="text-[9px] font-black text-navy/30 uppercase">{key}</p>
@@ -327,62 +399,71 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
   return (
     <div className="space-y-6 pb-24 animate-in fade-in duration-500 min-h-screen">
       
-      {/* Search & Filter Header */}
-      <div className="space-y-4 sticky top-0 bg-cream/95 backdrop-blur-sm z-[60] pt-2 pb-2 -mx-4 px-4 border-b border-accent/20">
-         <div className="flex items-center gap-2 bg-white p-3 rounded-2xl-sticker border border-accent shadow-sm">
-            <Search size={18} className="text-navy/30" />
-            <input 
-               type="text" 
-               placeholder="Search tickets, Ref No..." 
-               value={searchTerm}
-               onChange={(e) => setSearchTerm(e.target.value)}
-               className="flex-1 bg-transparent border-none p-0 text-navy font-bold placeholder:text-navy/20 focus:ring-0 text-sm"
-            />
-            {searchTerm && <button onClick={() => setSearchTerm('')}><X size={14} className="text-navy/30" /></button>}
-         </div>
-
-         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            <button 
-               onClick={() => setFilterUser('All')}
-               className={`flex-shrink-0 px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all ${filterUser === 'All' ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy/40'}`}
-            >
-               <User size={12} /> <span className="text-[10px] font-black uppercase">All</span>
-            </button>
-            {members.map(m => (
-               <button 
-                  key={m.id}
-                  onClick={() => setFilterUser(m.id)}
-                  className={`flex-shrink-0 pr-3 py-1 rounded-full flex items-center gap-2 border transition-all ${filterUser === m.id ? 'bg-stitch border-stitch text-white pl-1' : 'bg-white border-accent text-navy/40 pl-1'}`}
-               >
-                  <img src={m.avatar} className="w-5 h-5 rounded-full" />
-                  <span className="text-[10px] font-black uppercase">{m.name}</span>
-               </button>
-            ))}
-         </div>
-      </div>
-
-      <div className="flex justify-between items-center px-1">
+      {/* Header with Search Toggle */}
+      <div className="flex justify-between items-center px-1 sticky top-0 bg-cream/95 backdrop-blur-sm z-[60] py-4 border-b border-accent/20">
         <div>
           <h2 className="text-2xl font-black text-navy">Ticket Wallet</h2>
           <p className="text-[10px] font-bold text-navy/30 uppercase tracking-[0.2em]">
-             {filteredBookings.length} Vouchers Found
+             {filteredBookings.length} Vouchers
           </p>
         </div>
-        <button 
-          onClick={() => { setEditingBooking(null); setIsModalOpen(true); }}
-          className="w-12 h-12 bg-donald rounded-full sticker-shadow border-2 border-white flex items-center justify-center text-navy active:scale-90 transition-transform shadow-lg z-50"
-        >
-          <Plus size={28} />
-        </button>
+        <div className="flex gap-2">
+           <button 
+             onClick={() => setIsSearchVisible(!isSearchVisible)}
+             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isSearchVisible ? 'bg-navy text-white' : 'bg-white text-navy/40 border border-accent'}`}
+           >
+             <Search size={18} />
+           </button>
+           <button 
+             onClick={() => { setEditingBooking(null); setIsModalOpen(true); }}
+             className="w-10 h-10 bg-donald rounded-full flex items-center justify-center text-navy shadow-lg border border-white active:scale-90 transition-transform"
+           >
+             <Plus size={20} />
+           </button>
+        </div>
       </div>
+
+      {/* Collapsible Search Bar */}
+      {isSearchVisible && (
+        <div className="animate-in slide-in-from-top-2 fade-in duration-200 -mt-2 mb-4 bg-white p-4 rounded-2xl-sticker border border-accent sticker-shadow">
+           <div className="flex items-center gap-2 bg-cream p-3 rounded-xl border border-accent/50 mb-3">
+              <input 
+                 type="text" 
+                 placeholder="Search tickets, Ref No..." 
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+                 className="flex-1 bg-transparent border-none p-0 text-navy font-bold placeholder:text-navy/20 focus:ring-0 text-sm"
+                 autoFocus
+              />
+              {searchTerm && <button onClick={() => setSearchTerm('')}><X size={14} className="text-navy/30" /></button>}
+           </div>
+           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <button 
+                 onClick={() => setFilterUser('All')}
+                 className={`flex-shrink-0 px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all ${filterUser === 'All' ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy/40'}`}
+              >
+                 <User size={12} /> <span className="text-[10px] font-black uppercase">All</span>
+              </button>
+              {members.map(m => (
+                 <button 
+                    key={m.id}
+                    onClick={() => setFilterUser(m.id)}
+                    className={`flex-shrink-0 pr-3 py-1 rounded-full flex items-center gap-2 border transition-all ${filterUser === m.id ? 'bg-stitch border-stitch text-white pl-1' : 'bg-white border-accent text-navy/40 pl-1'}`}
+                 >
+                    <img src={m.avatar} className="w-5 h-5 rounded-full" />
+                    <span className="text-[10px] font-black uppercase">{m.name}</span>
+                 </button>
+              ))}
+           </div>
+        </div>
+      )}
       
       {/* Stacked Layout Container */}
-      <div className="relative pb-24 flex flex-col pt-4">
+      <div className="relative pb-24 flex flex-col pt-4 px-1">
         {filteredBookings.length > 0 ? (
           filteredBookings.map((booking, index) => {
              const isExpanded = expandedId === booking.id;
-             // Stack logic: Less overlap when expanded
-             
+             // Improved Stacking Logic: Show visible Header (Top info)
              return (
                <div 
                   key={booking.id}
@@ -391,17 +472,14 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
                      relative w-full rounded-2xl-sticker overflow-hidden border-2 sticker-shadow transition-all duration-500 ease-in-out cursor-pointer
                      ${isExpanded 
                         ? 'z-50 my-4 scale-[1.02] shadow-2xl' 
-                        : 'z-0 -mt-16 hover:-mt-12 hover:z-40 hover:scale-[1.01] hover:shadow-lg' // Increased negative margin
+                        : 'z-0 -mt-12 hover:-mt-10 hover:z-40 hover:scale-[1.005] hover:shadow-lg' // -mt-12 ensures top ~50px is visible
                      }
                      ${index === 0 && !isExpanded ? 'mt-0' : ''}
                      ${booking.type === 'Flight' ? 'border-navy' : booking.type === 'Amusement' ? 'border-donald' : 'border-accent'}
                   `}
-                  style={{ 
-                     // Ensure visual stacking order when collapsed
-                     zIndex: isExpanded ? 50 : index 
-                  }}
+                  style={{ zIndex: isExpanded ? 50 : index }}
                >
-                  {renderHeaderStrip(booking, isExpanded)}
+                  {renderHeaderStrip(booking, isExpanded, index, filteredBookings.length)}
                   
                   {/* Expandable Content Area */}
                   <div className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[1000px]' : 'max-h-0'}`}>
@@ -433,6 +511,29 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
   );
 };
 
+// Image compression utility
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.6)); 
+      };
+    };
+  });
+};
+
 const BookingFormModal: React.FC<{ 
   initialData: Booking | null; 
   members: TripMember[]; 
@@ -442,7 +543,7 @@ const BookingFormModal: React.FC<{
   onSave: (b: Booking) => void 
 }> = ({ initialData, members, itinerary, currentUser, onClose, onSave }) => {
   const [formData, setFormData] = useState<Partial<Booking>>(initialData || {
-    type: 'Hotel',
+    type: 'Ticket',
     title: '',
     referenceNo: '',
     bookedBy: currentUser.id,
@@ -453,19 +554,71 @@ const BookingFormModal: React.FC<{
   });
 
   const [imagePreview, setImagePreview] = useState<string>(initialData?.imageUrl || '');
+  const [isScanning, setIsScanning] = useState(false);
 
   const types: Booking['type'][] = ['Flight', 'Hotel', 'Car', 'Restaurant', 'Amusement', 'Ticket'];
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setImagePreview(base64);
-        setFormData({ ...formData, imageUrl: base64 });
-      };
-      reader.readAsDataURL(file);
+      try {
+        setIsScanning(true);
+        const compressedBase64 = await compressImage(file);
+        setImagePreview(compressedBase64);
+        setFormData(prev => ({ ...prev, imageUrl: compressedBase64 }));
+
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const base64Data = compressedBase64.split(',')[1]; 
+
+        const response = await ai.models.generateContent({
+           model: 'gemini-3-flash-preview',
+           contents: {
+             parts: [
+               { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
+               {
+                 text: `Analyze this image. Extract details into JSON:
+                 {
+                   type: "Flight" | "Hotel" | "Car" | "Restaurant" | "Amusement" | "Ticket",
+                   title: string,
+                   referenceNo: string,
+                   details: {
+                      date: string (YYYY-MM-DD),
+                      time: string (HH:MM),
+                      arrivalTime: string (HH:MM) (for flights only),
+                      from: string,
+                      to: string,
+                      seat: string,
+                      gate: string,
+                      address: string,
+                      checkIn: string (YYYY-MM-DD),
+                      checkOut: string (YYYY-MM-DD),
+                   }
+                 }
+                 Return ONLY JSON.`
+               }
+             ]
+           }
+        });
+
+        const text = response.text || "";
+        const jsonStr = text.replace(/```json|```/g, '').trim();
+        const extracted = JSON.parse(jsonStr);
+
+        if (extracted) {
+           setFormData(prev => ({
+             ...prev,
+             type: extracted.type || prev.type,
+             title: extracted.title || prev.title,
+             referenceNo: extracted.referenceNo || prev.referenceNo,
+             details: { ...prev.details, ...extracted.details }
+           }));
+        }
+
+      } catch (error) {
+        console.error("Scan failed", error);
+      } finally {
+        setIsScanning(false);
+      }
     }
   };
 
@@ -490,71 +643,52 @@ const BookingFormModal: React.FC<{
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-20">
-        {/* Type Selection */}
+        <div 
+          className="w-full aspect-[21/9] bg-white rounded-2xl-sticker sticker-shadow border-2 border-dashed border-accent flex flex-col items-center justify-center relative overflow-hidden group transition-all active:scale-95 cursor-pointer"
+          onClick={() => document.getElementById('imageInput')?.click()}
+        >
+          {imagePreview ? (
+            <div className="relative w-full h-full">
+               <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+               <button onClick={(e) => { e.stopPropagation(); removeImage(); }} className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg"><X size={14} /></button>
+               {isScanning && (
+                 <div className="absolute inset-0 bg-navy/60 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in">
+                    <Wand2 size={32} className="animate-pulse mb-2 text-donald" />
+                    <p className="font-black uppercase tracking-widest text-xs animate-bounce">Scanning...</p>
+                 </div>
+               )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center text-navy/20 w-full h-full justify-center group-hover:bg-stitch/5 transition-colors">
+              <Camera size={40} className="mb-2" />
+              <p className="text-[10px] font-black uppercase">Snap Ticket & Auto-Scan</p>
+            </div>
+          )}
+          <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+        </div>
+
         <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow">
           <label className="text-[10px] font-black uppercase text-navy/40 mb-3 block">Category</label>
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {types.map(t => (
-              <button
-                key={t}
-                onClick={() => setFormData({ ...formData, type: t })}
-                className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
-                  formData.type === t ? 'bg-navy text-white sticker-shadow scale-105' : 'bg-accent/20 text-navy/40'
-                }`}
-              >
-                {t}
-              </button>
+              <button key={t} onClick={() => setFormData({ ...formData, type: t })} className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${formData.type === t ? 'bg-navy text-white sticker-shadow scale-105' : 'bg-accent/20 text-navy/40'}`}>{t}</button>
             ))}
           </div>
         </div>
 
-        {/* Linked Schedule Item (New) */}
-        <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow">
-           <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block flex items-center gap-1">
-             <Calendar size={12} /> Connect to Schedule
-           </label>
-           <div className="relative">
-             <select 
-                value={formData.linkedScheduleId || ''}
-                onChange={e => setFormData({...formData, linkedScheduleId: e.target.value})}
-                className="w-full bg-cream border border-accent rounded-xl p-3 font-bold text-sm appearance-none focus:ring-0 focus:border-stitch"
-             >
-                <option value="">-- Unlinked --</option>
-                {itinerary.filter(i => i.title || i.location).map(item => (
-                   <option key={item.id} value={item.id}>
-                      Day {item.dayIndex + 1} - {item.location || item.title} ({item.time})
-                   </option>
-                ))}
-             </select>
-             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">▼</div>
-           </div>
-        </div>
-
-        {/* Reference & Booker Info */}
         <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow space-y-4">
            <div>
               <label className="text-[10px] font-black uppercase text-navy/40 mb-1 block">Booking Reference / PNR</label>
               <div className="flex items-center gap-2 bg-accent/10 p-2 rounded-xl border border-accent/20">
                  <Hash size={16} className="text-navy/30" />
-                 <input 
-                   type="text" 
-                   value={formData.referenceNo || ''} 
-                   onChange={e => setFormData({ ...formData, referenceNo: e.target.value.toUpperCase() })} 
-                   placeholder="e.g. M7X9L2" 
-                   className="w-full font-black text-navy bg-transparent border-none p-0 focus:ring-0 uppercase placeholder:normal-case" 
-                 />
+                 <input type="text" value={formData.referenceNo || ''} onChange={e => setFormData({ ...formData, referenceNo: e.target.value.toUpperCase() })} placeholder="e.g. M7X9L2" className="w-full font-black text-navy bg-transparent border-none p-0 focus:ring-0 uppercase" />
               </div>
            </div>
-
            <div>
               <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block">Who Booked This?</label>
               <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
                  {members.map(m => (
-                    <button 
-                       key={m.id}
-                       onClick={() => setFormData({...formData, bookedBy: m.id})}
-                       className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${formData.bookedBy === m.id ? 'bg-stitch border-stitch text-white' : 'bg-white border-accent text-navy/40'}`}
-                    >
+                    <button key={m.id} onClick={() => setFormData({...formData, bookedBy: m.id})} className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${formData.bookedBy === m.id ? 'bg-stitch border-stitch text-white' : 'bg-white border-accent text-navy/40'}`}>
                        <img src={m.avatar} className="w-5 h-5 rounded-full" />
                        <span className="text-[10px] font-black uppercase">{m.name}</span>
                     </button>
@@ -563,42 +697,10 @@ const BookingFormModal: React.FC<{
            </div>
         </div>
 
-        {/* Voucher Snapshot */}
-        <div 
-          className="w-full aspect-[21/9] bg-white rounded-2xl-sticker sticker-shadow border-2 border-dashed border-accent flex flex-col items-center justify-center relative overflow-hidden group transition-all active:scale-95"
-          onClick={() => document.getElementById('imageInput')?.click()}
-        >
-          {imagePreview ? (
-            <div className="relative w-full h-full">
-               <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-               <button 
-                  onClick={(e) => { e.stopPropagation(); removeImage(); }}
-                  className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg"
-               >
-                 <X size={14} />
-               </button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center text-navy/20 w-full h-full justify-center">
-              <Camera size={40} className="mb-2" />
-              <p className="text-[10px] font-black uppercase">Snap Ticket / Voucher</p>
-              <p className="text-[8px] opacity-60 mt-1 uppercase">(Required for entry)</p>
-            </div>
-          )}
-          <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-        </div>
-
-        {/* Main Details */}
         <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-navy/40 mb-1 block">Title / Place</label>
-            <input 
-              type="text" 
-              value={formData.title} 
-              onChange={e => setFormData({ ...formData, title: e.target.value })} 
-              placeholder="e.g. Disney Ticket" 
-              className="w-full text-xl font-black text-navy bg-transparent border-none p-0 focus:ring-0" 
-            />
+            <input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} placeholder="e.g. Disney Ticket" className="w-full text-xl font-black text-navy bg-transparent border-none p-0 focus:ring-0" />
           </div>
           
           <div className="grid grid-cols-2 gap-4">
@@ -607,8 +709,8 @@ const BookingFormModal: React.FC<{
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">From</label><input type="text" placeholder="HKG" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.from || ''} onChange={e => updateDetail('from', e.target.value)} /></div>
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">To</label><input type="text" placeholder="NRT" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.to || ''} onChange={e => updateDetail('to', e.target.value)} /></div>
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">Date</label><input type="text" placeholder="12 OCT" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.date || ''} onChange={e => updateDetail('date', e.target.value)} /></div>
-                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Time</label><input type="time" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.time || ''} onChange={e => updateDetail('time', e.target.value)} /></div>
-                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Seat</label><input type="text" placeholder="1A" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.seat || ''} onChange={e => updateDetail('seat', e.target.value)} /></div>
+                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Departure</label><input type="time" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.time || ''} onChange={e => updateDetail('time', e.target.value)} /></div>
+                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Arrival</label><input type="time" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.arrivalTime || ''} onChange={e => updateDetail('arrivalTime', e.target.value)} /></div>
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">Gate</label><input type="text" placeholder="-" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.gate || ''} onChange={e => updateDetail('gate', e.target.value)} /></div>
               </>
             )}
