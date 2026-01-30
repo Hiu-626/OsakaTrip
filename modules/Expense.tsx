@@ -18,7 +18,9 @@ import {
   Coins,
   Calendar,
   Tag,
-  PieChart
+  PieChart,
+  CheckCircle2,
+  Users
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { COLORS } from '../constants';
@@ -27,37 +29,37 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   // --- Data States ---
   const [expenses, setExpenses] = useState<ExpenseType[]>(() => {
     const saved = localStorage.getItem('expenses');
-    return saved ? JSON.parse(saved) : [];
+    const parsed = saved ? JSON.parse(saved) : [];
+    // Migration: ensure settledBy array exists if coming from old data
+    return parsed.map((e: any) => ({
+      ...e,
+      settledBy: e.settledBy || (e.isSettled ? e.splitWith : []) // if old binary 'isSettled' was true, mark everyone as settled
+    }));
   });
 
   // --- Currency System States ---
-  // Active currencies list (e.g. ['JPY', 'HKD'])
   const [activeCurrencies, setActiveCurrencies] = useState<string[]>(() => {
     const saved = localStorage.getItem('activeCurrencies');
     return saved ? JSON.parse(saved) : ['JPY', 'HKD', 'AUD'];
   });
 
-  // Exchange rates relative to JPY (Pivot: 1 Unit Currency = X JPY)
-  // Example: HKD: 19.5 means 1 HKD = 19.5 JPY
   const [rates, setRates] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('exchangeRates');
     return saved ? JSON.parse(saved) : { JPY: 1, HKD: 19.2, AUD: 96.5, USD: 150.0, EUR: 162.0, TWD: 4.7 };
   });
 
-  // User's preferred display currency
   const [displayCurrency, setDisplayCurrency] = useState<string>(() => {
     return localStorage.getItem('displayCurrency') || 'HKD';
   });
 
   // --- UI States ---
-  const [expandedId, setExpandedId] = useState<string | null>(null); // For push-down expansion
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Bottom Drawer for Currencies
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseType | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
 
-  // Common world currencies for selection
   const AVAILABLE_CURRENCIES = ['JPY', 'HKD', 'AUD', 'USD', 'EUR', 'GBP', 'TWD', 'KRW', 'SGD', 'CNY', 'THB'];
 
   // --- Effects ---
@@ -67,9 +69,8 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   useEffect(() => { localStorage.setItem('displayCurrency', displayCurrency); }, [displayCurrency]);
 
   // --- Helpers ---
-  // Convert any amount from source currency to target currency using JPY as pivot
   const convert = (amount: number, from: string, to: string) => {
-    const rateFrom = rates[from] || 1; // Rate is "How many JPY is 1 unit of X"
+    const rateFrom = rates[from] || 1;
     const rateTo = rates[to] || 1;
     const amountInJPY = amount * rateFrom;
     return amountInJPY / rateTo;
@@ -93,6 +94,24 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     return map[cat] || COLORS.other;
   };
 
+  // Toggle settled status for a specific member
+  const toggleMemberSettled = (e: React.MouseEvent, expenseId: string, memberId: string) => {
+    e.stopPropagation();
+    setExpenses(prev => prev.map(exp => {
+      if (exp.id === expenseId) {
+        const currentSettled = exp.settledBy || [];
+        const isSettled = currentSettled.includes(memberId);
+        return {
+          ...exp,
+          settledBy: isSettled 
+            ? currentSettled.filter(id => id !== memberId) 
+            : [...currentSettled, memberId]
+        };
+      }
+      return exp;
+    }));
+  };
+
   // --- Smart Settlement Logic ---
   const balances = useMemo(() => {
     const bal: Record<string, number> = {};
@@ -102,21 +121,32 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
       // 1. Normalize everything to JPY (Pivot)
       const amountInJPY = exp.amount * (rates[exp.currency] || 1);
       
-      // 2. Calculate Payer credit
-      bal[exp.paidBy] += amountInJPY;
-      
-      // 3. Calculate Debtor share
+      // 2. Calculate Debtor share per person
       const splitCount = exp.splitWith.length || 1;
       const shareInJPY = amountInJPY / splitCount;
       
-      exp.splitWith.forEach(id => {
-        if (bal[id] !== undefined) bal[id] -= shareInJPY;
+      // 3. Process each splitter
+      exp.splitWith.forEach(debtorId => {
+        const isSelf = debtorId === exp.paidBy;
+        
+        // Skip if this specific debtor has settled ("找左數")
+        // Or if it's the payer themselves (no debt to self)
+        if (exp.settledBy?.includes(debtorId)) {
+          return; 
+        }
+
+        if (!isSelf) {
+          // Debtor owes share
+          if (bal[debtorId] !== undefined) bal[debtorId] -= shareInJPY;
+          // Payer receives credit ONLY for the unsettled parts
+          if (bal[exp.paidBy] !== undefined) bal[exp.paidBy] += shareInJPY;
+        }
       });
     });
     return bal;
   }, [expenses, rates, members]);
 
-  // Total spent in Display Currency
+  // Total spent (Includes everything regardless of settlement, just for stats)
   const totalSpentDisplay = useMemo(() => {
     const totalJPY = expenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
     return convert(totalJPY, 'JPY', displayCurrency);
@@ -143,7 +173,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
       .sort((a, b) => b.value - a.value);
   }, [expenses, rates, displayCurrency]);
 
-  // --- Gemini Rate Sync ---
   const fetchRates = async () => {
     if (!process.env.API_KEY) {
       alert("Missing API Key");
@@ -152,7 +181,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     setLoadingRates(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      // We ask for rates of all active currencies against JPY
       const currenciesToFetch = activeCurrencies.filter(c => c !== 'JPY').join(', ');
       
       const response = await ai.models.generateContent({
@@ -179,11 +207,9 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
       
       {/* --- DASHBOARD --- */}
       <div className="bg-white/90 backdrop-blur-md p-6 rounded-3xl-sticker sticker-shadow border border-stitch/20 relative overflow-hidden">
-        {/* Background Decor */}
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-donald/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="relative z-10">
-           {/* Top Row: Label & Settings */}
            <div className="flex justify-between items-center mb-2">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-navy/30">Total Trip Spending</p>
               <button 
@@ -194,7 +220,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
               </button>
            </div>
 
-           {/* Main Amount - Click currency to switch */}
            <div className="flex items-baseline gap-2 mb-6">
               <button 
                 onClick={() => setIsSettingsOpen(true)}
@@ -207,7 +232,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
               </h1>
            </div>
 
-           {/* Action Buttons */}
            <div className="grid grid-cols-2 gap-3">
               <button 
                 onClick={() => { setEditingExpense(null); setIsModalOpen(true); }}
@@ -225,7 +249,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         </div>
       </div>
 
-      {/* --- CATEGORY BREAKDOWN (Replaces Stitch Balance) --- */}
+      {/* --- CATEGORY BREAKDOWN --- */}
       <div className="bg-white p-5 rounded-2xl-sticker sticker-shadow border border-accent/40 relative overflow-hidden">
         <div className="flex justify-between items-center mb-4">
            <h3 className="text-[10px] font-black text-navy/30 uppercase tracking-[0.2em] flex items-center gap-1">
@@ -280,20 +304,42 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
              {expenses.map((exp) => {
                const payer = members.find(m => m.id === exp.paidBy);
                const isExpanded = expandedId === exp.id;
-               
-               // Fallback if no title (for old data)
                const displayName = exp.title || exp.category;
                
+               // Determine full settled status
+               const allSettled = exp.splitWith.length > 0 && exp.splitWith.every(id => exp.settledBy?.includes(id));
+               const partiallySettled = exp.settledBy && exp.settledBy.length > 0 && !allSettled;
+
                return (
                  <div 
                    key={exp.id}
                    onClick={() => setExpandedId(isExpanded ? null : exp.id)}
-                   className={`bg-white rounded-2xl-sticker border transition-all duration-300 overflow-hidden cursor-pointer ${isExpanded ? 'border-stitch shadow-lg scale-[1.01] z-10' : 'border-accent/40 sticker-shadow hover:border-stitch/30'}`}
+                   className={`
+                      relative rounded-2xl-sticker border transition-all duration-300 overflow-hidden cursor-pointer 
+                      ${isExpanded ? 'bg-white border-stitch shadow-lg scale-[1.01] z-10' : 'bg-white border-accent/40 sticker-shadow hover:border-stitch/30'}
+                      ${allSettled ? 'opacity-70 bg-gray-50/50' : ''}
+                   `}
                  >
-                    {/* Collapsed View (Always Visible) */}
-                    <div className="p-4 flex items-center gap-4">
-                       {/* Icon / Category */}
-                       <div className="w-10 h-10 rounded-full bg-cream flex items-center justify-center text-lg shadow-inner flex-shrink-0" style={{ color: getCategoryColor(exp.category) }}>
+                    {/* Collapsed View */}
+                    <div className="p-4 flex items-center gap-4 relative">
+                       {/* Fully Settled Badge */}
+                       {allSettled && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-200 z-20">
+                             <Check size={8} strokeWidth={4} />
+                             <span className="text-[8px] font-black uppercase tracking-wider">All Settled</span>
+                          </div>
+                       )}
+                       
+                       {/* Partially Settled Badge */}
+                       {partiallySettled && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full border border-orange-200 z-20">
+                             <CheckCircle2 size={8} strokeWidth={4} />
+                             <span className="text-[8px] font-black uppercase tracking-wider">Partial</span>
+                          </div>
+                       )}
+
+                       {/* Icon */}
+                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-inner flex-shrink-0 ${allSettled ? 'grayscale opacity-50 bg-gray-100' : 'bg-cream'}`} style={{ color: allSettled ? '#999' : getCategoryColor(exp.category) }}>
                           {exp.category === 'Food' || exp.category === 'Restaurant' ? '🍜' : 
                            exp.category === 'Transport' ? '🚕' : 
                            exp.category === 'Shopping' ? '🛍️' : 
@@ -303,36 +349,69 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
 
                        {/* Main Details */}
                        <div className="flex-1 min-w-0">
-                          <h4 className="font-black text-navy text-sm truncate">{displayName}</h4>
+                          <h4 className={`font-black text-sm truncate ${allSettled ? 'text-navy/50 line-through' : 'text-navy'}`}>{displayName}</h4>
                           <div className="flex items-center gap-2 mt-0.5">
-                             <img src={payer?.avatar} className="w-4 h-4 rounded-full border border-white" />
+                             <img src={payer?.avatar} className={`w-4 h-4 rounded-full border border-white ${allSettled ? 'grayscale' : ''}`} />
                              <span className="text-[10px] font-bold text-navy/40 uppercase">{payer?.name} Paid</span>
                           </div>
                        </div>
 
                        {/* Amount */}
                        <div className="text-right">
-                          <p className="font-black text-navy text-sm">{formatMoney(exp.amount, exp.currency)}</p>
+                          <p className={`font-black text-sm ${allSettled ? 'text-navy/40' : 'text-navy'}`}>{formatMoney(exp.amount, exp.currency)}</p>
                           <p className="text-[9px] font-bold text-navy/20">
                              ≈ {displayCurrency} {Math.round(convert(exp.amount, exp.currency, displayCurrency)).toLocaleString()}
                           </p>
                        </div>
                     </div>
 
-                    {/* Push-Down Expanded Content */}
-                    <div className={`bg-stitch/5 border-t border-stitch/10 overflow-hidden transition-[max-height, padding] duration-300 ease-in-out ${isExpanded ? 'max-h-40' : 'max-h-0'}`}>
-                       <div className="p-4 flex items-center justify-between">
-                          <div className="flex flex-col gap-1">
-                             <div className="text-[9px] font-bold text-navy/30 uppercase tracking-wider mb-1">Split With</div>
-                             <div className="flex -space-x-2">
-                                {exp.splitWith.map(uid => {
+                    {/* Expanded View: Settlement Toggles */}
+                    <div className={`bg-stitch/5 border-t border-stitch/10 overflow-hidden transition-[max-height, padding] duration-300 ease-in-out ${isExpanded ? 'max-h-80' : 'max-h-0'}`}>
+                       <div className="p-4 flex flex-col gap-3">
+                          
+                          {/* Splitter Settlement List */}
+                          <div className="bg-white rounded-xl border border-accent/40 p-3">
+                             <p className="text-[9px] font-bold text-navy/30 uppercase tracking-wider mb-2 flex items-center gap-1">
+                               <Users size={10} /> Split Status (Tap to toggle settled)
+                             </p>
+                             <div className="space-y-2">
+                               {exp.splitWith.map(uid => {
                                   const m = members.find(mem => mem.id === uid);
-                                  return <img key={uid} src={m?.avatar} className="w-6 h-6 rounded-full border-2 border-white" title={m?.name} />;
-                                })}
+                                  const isMemberSettled = exp.settledBy?.includes(uid);
+                                  const isPayer = uid === exp.paidBy;
+
+                                  return (
+                                     <button 
+                                        key={uid}
+                                        onClick={(e) => toggleMemberSettled(e, exp.id, uid)}
+                                        className={`w-full flex items-center justify-between p-2 rounded-lg border transition-all ${
+                                           isMemberSettled 
+                                           ? 'bg-green-50 border-green-200 opacity-60' 
+                                           : isPayer 
+                                              ? 'bg-cream border-transparent cursor-default'
+                                              : 'bg-white border-accent hover:border-stitch'
+                                        }`}
+                                        disabled={isPayer} // Payer doesn't need to "settle" with themselves
+                                     >
+                                        <div className="flex items-center gap-2">
+                                           <img src={m?.avatar} className={`w-6 h-6 rounded-full border ${isMemberSettled ? 'grayscale' : 'border-white'}`} />
+                                           <span className={`text-[10px] font-black uppercase ${isMemberSettled ? 'text-green-600 line-through' : 'text-navy'}`}>
+                                              {m?.name} {isPayer && '(Payer)'}
+                                           </span>
+                                        </div>
+                                        {/* Status Icon */}
+                                        {!isPayer && (
+                                           <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${isMemberSettled ? 'bg-green-500 border-green-500 text-white' : 'border-accent'}`}>
+                                              {isMemberSettled && <Check size={12} strokeWidth={3} />}
+                                           </div>
+                                        )}
+                                     </button>
+                                  );
+                               })}
                              </div>
                           </div>
                           
-                          <div className="flex gap-2">
+                          <div className="flex justify-end gap-2 pt-2 border-t border-navy/5">
                              <button 
                                onClick={(e) => { e.stopPropagation(); setEditingExpense(exp); setIsModalOpen(true); }}
                                className="p-2 bg-white text-stitch rounded-xl shadow-sm border border-stitch/20 hover:bg-stitch hover:text-white transition-colors flex items-center gap-1 text-[10px] font-black px-3"
@@ -347,9 +426,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                              </button>
                           </div>
                        </div>
-                       <div className="px-4 pb-3 text-[9px] font-bold text-navy/30 text-center uppercase tracking-wider">
-                          {exp.date} • Rate used: 1 {exp.currency} ≈ {convert(1, exp.currency, displayCurrency).toFixed(2)} {displayCurrency}
-                       </div>
                     </div>
                  </div>
                );
@@ -363,7 +439,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
          )}
       </div>
 
-      {/* --- CURRENCY SETTINGS DRAWER (Bottom Sheet) --- */}
+      {/* --- CURRENCY SETTINGS DRAWER --- */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}>
            <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-10 sticker-shadow animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
@@ -374,7 +450,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                  <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
               </div>
 
-              {/* Display Currency Selection */}
               <div className="mb-6">
                  <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Display Currency</label>
                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -390,9 +465,8 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                  </div>
               </div>
 
-              {/* Active Currencies Toggle */}
               <div className="mb-6">
-                 <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Active Currencies (My Wallet)</label>
+                 <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Active Currencies</label>
                  <div className="flex flex-wrap gap-2">
                     {AVAILABLE_CURRENCIES.map(cur => {
                        const isActive = activeCurrencies.includes(cur);
@@ -409,19 +483,14 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                  </div>
               </div>
               
-              {/* Rate Sync Button */}
               <button 
                  onClick={fetchRates}
                  disabled={loadingRates}
                  className="w-full py-4 bg-navy text-white font-black rounded-2xl-sticker uppercase text-xs tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all"
               >
                  <RefreshCw size={16} className={loadingRates ? 'animate-spin' : ''} />
-                 {loadingRates ? 'Syncing with Gemini...' : 'Update Rates with AI'}
+                 {loadingRates ? 'Syncing...' : 'Update Rates'}
               </button>
-              
-              <p className="text-[9px] text-navy/20 text-center mt-3 font-bold">
-                 Using Gemini 1.5 Flash • Base: JPY
-              </p>
            </div>
         </div>
       )}
@@ -467,7 +536,7 @@ const SettlementModal: React.FC<{
    
    const suggestions = useMemo(() => {
       const people = Object.entries(balances).map(([id, amount]) => ({ id, amount }));
-      const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount); // Less than -1 JPY to ignore dust
+      const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount);
       const creditors = people.filter(p => p.amount > 1).sort((a, b) => b.amount - a.amount);
       
       const transactions = [];
@@ -495,6 +564,12 @@ const SettlementModal: React.FC<{
            <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-black text-navy uppercase tracking-widest">Settlement Plan</h3>
               <button onClick={onClose} className="p-2 bg-cream rounded-full text-navy/20"><X size={20} /></button>
+           </div>
+
+           <div className="mb-4 p-3 bg-stitch/10 rounded-xl border border-stitch/20 text-center">
+             <p className="text-[10px] font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-1">
+               <CheckCircle2 size={12} /> Calculates outstanding debts only
+             </p>
            </div>
            
            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
@@ -534,10 +609,11 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
     amount: '',
     currency: currencies[0],
     category: '',
-    title: '', // New Title field
+    title: '',
     paidBy: members[0].id,
     splitWith: members.map(m => m.id),
-    date: new Date().toISOString().split('T')[0]
+    settledBy: [],
+    date: new Date().toISOString().split('T')[0],
   } as any);
 
   const categories = ['Food', 'Restaurant', 'Transport', 'Shopping', 'Stay', 'Ticket', 'Attraction', 'Other'];
@@ -649,7 +725,12 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                         key={m.id} 
                         onClick={() => {
                            const current = formData.splitWith || [];
-                           setFormData({ ...formData, splitWith: isSelected ? current.filter(id => id !== m.id) : [...current, m.id] });
+                           // If unselecting, ensure we also remove from settledBy to prevent ghost settlements
+                           const newSplit = isSelected ? current.filter(id => id !== m.id) : [...current, m.id];
+                           const newSettled = isSelected 
+                              ? (formData.settledBy || []).filter(id => id !== m.id) 
+                              : (formData.settledBy || []);
+                           setFormData({ ...formData, splitWith: newSplit, settledBy: newSettled });
                         }} 
                         className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${isSelected ? 'bg-stitch/10 border-stitch text-navy' : 'bg-white border-accent/40 text-navy/20'}`}
                      >

@@ -4,20 +4,16 @@ import {
   Calendar, 
   Ticket, 
   Wallet, 
-  Camera, 
   CheckSquare, 
-  Users,
-  CloudCheck
 } from 'lucide-react';
 import { MOCK_MEMBERS, MOCK_TRIP_CONFIG } from './constants';
 import { TripMember } from './types';
 import Schedule from './modules/Schedule';
 import Bookings from './modules/Bookings';
 import Expense from './modules/Expense';
-import Journal from './modules/Journal';
 import Planning from './modules/Planning';
 
-type Tab = 'schedule' | 'bookings' | 'expense' | 'journal' | 'planning';
+type Tab = 'schedule' | 'bookings' | 'expense' | 'planning';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('schedule');
@@ -40,8 +36,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const savedTab = localStorage.getItem('activeTab') as Tab;
-    // Prevent loading 'members' tab if it was saved previously
-    if (savedTab && savedTab !== 'members' as any) setActiveTab(savedTab);
+    if (savedTab && ['schedule', 'bookings', 'expense', 'planning'].includes(savedTab)) {
+      setActiveTab(savedTab);
+    }
   }, []);
 
   useEffect(() => {
@@ -66,6 +63,14 @@ const App: React.FC = () => {
     setMembers([...members, newMember]);
   };
 
+  const handleUpdateMember = (id: string, name: string, avatar: string) => {
+    setMembers(members.map(m => m.id === id ? { ...m, name, avatar } : m));
+    // If updating current user, update local state too
+    if (currentUser.id === id) {
+      setCurrentUser({ ...currentUser, name, avatar });
+    }
+  };
+
   const handleDeleteMember = (id: string) => {
     if (id === currentUser.id) {
       alert("Ohana! 你不能刪除目前正在使用的身分。");
@@ -80,9 +85,6 @@ const App: React.FC = () => {
     setActiveTab(tab);
     if (id) {
       setHighlightId(id);
-      // Clear highlight after a delay to allow re-highlighting if needed, 
-      // but strictly Bookings will handle it via useEffect on prop change.
-      // Keeping it simple for now.
     }
   };
 
@@ -94,6 +96,7 @@ const App: React.FC = () => {
           members={members}
           currentUser={currentUser}
           onAddMember={handleAddMember}
+          onUpdateMember={handleUpdateMember}
           onDeleteMember={handleDeleteMember}
           onSwitchUser={handleSwitchUser}
           onNavigate={handleNavigate}
@@ -108,7 +111,6 @@ const App: React.FC = () => {
         />
       );
       case 'expense': return <Expense currentUser={currentUser} members={members} />;
-      case 'journal': return <Journal currentUser={currentUser} members={members} />;
       case 'planning': return <Planning members={members} />;
       default: return (
         <Schedule 
@@ -116,6 +118,7 @@ const App: React.FC = () => {
           members={members}
           currentUser={currentUser}
           onAddMember={handleAddMember}
+          onUpdateMember={handleUpdateMember}
           onDeleteMember={handleDeleteMember}
           onSwitchUser={handleSwitchUser}
           onNavigate={handleNavigate}
@@ -146,7 +149,6 @@ const App: React.FC = () => {
         <NavButton active={activeTab === 'schedule'} onClick={() => handleNavigate('schedule')} icon={<Calendar size={22} />} label="行程" />
         <NavButton active={activeTab === 'bookings'} onClick={() => handleNavigate('bookings')} icon={<Ticket size={22} />} label="票券" />
         <NavButton active={activeTab === 'expense'} onClick={() => handleNavigate('expense')} icon={<Wallet size={22} />} label="記帳" />
-        <NavButton active={activeTab === 'journal'} onClick={() => handleNavigate('journal')} icon={<Camera size={22} />} label="日誌" />
         <NavButton active={activeTab === 'planning'} onClick={() => handleNavigate('planning')} icon={<CheckSquare size={22} />} label="清單" />
       </nav>
     </div>

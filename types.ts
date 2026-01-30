@@ -39,15 +39,8 @@ export interface Expense {
   category: string; // Used for icon/color logic (Food, Transport, etc.)
   title: string;    // Custom name of the expense (e.g. "7-11 Snacks")
   paidBy: string;   // Member ID
-  splitWith: string[]; // Array of Member IDs
-  date: string;
-}
-
-export interface JournalPost {
-  id: string;
-  authorId: string;
-  content: string;
-  imageUrl?: string;
+  splitWith: string[]; // Array of Member IDs involved in the cost
+  settledBy?: string[]; // New: Array of Member IDs who have paid back their share
   date: string;
 }
 
@@ -64,4 +57,12 @@ export interface TripConfig {
   duration: number;
   tripName: string;
   region: string;
+}
+
+export interface JournalPost {
+  id: string;
+  authorId: string;
+  content: string;
+  imageUrl?: string;
+  date: string;
 }
