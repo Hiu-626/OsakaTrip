@@ -13,7 +13,12 @@ import {
   Check,
   Sparkles,
   FileDown,
-  Loader2
+  Loader2,
+  Smile,
+  Image as ImageIcon,
+  Link,
+  Upload,
+  Camera
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -29,8 +34,14 @@ interface MembersProps {
 const Members: React.FC<MembersProps> = ({ currentUser, members, onSwitch, onAdd, onDelete }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  
+  // Add Member State
   const [newName, setNewName] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState('https://picsum.photos/seed/new_member/200');
+  const [avatarType, setAvatarType] = useState<'preset' | 'emoji' | 'upload'>('preset');
+  const [selectedAvatar, setSelectedAvatar] = useState('https://picsum.photos/seed/new_member/200'); // Holds final URL or current preset selection
+  const [emojiChar, setEmojiChar] = useState('😎');
+  const [uploadedAvatar, setUploadedAvatar] = useState('');
+
   const exportRef = useRef<HTMLDivElement>(null);
 
   const avatarOptions = [
@@ -147,10 +158,47 @@ const Members: React.FC<MembersProps> = ({ currentUser, members, onSwitch, onAdd
     }
   };
 
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.src = ev.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const size = 200; // Resize to 200x200
+          canvas.width = size;
+          canvas.height = size;
+          
+          // Center Crop
+          const ratio = Math.max(size / img.width, size / img.height);
+          const centerShift_x = (size - img.width * ratio) / 2;
+          const centerShift_y = (size - img.height * ratio) / 2;
+          
+          ctx?.drawImage(img, 0, 0, img.width, img.height, centerShift_x, centerShift_y, img.width * ratio, img.height * ratio);
+          setUploadedAvatar(canvas.toDataURL('image/jpeg', 0.8));
+        };
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleAddSubmit = () => {
     if (newName.trim()) {
-      onAdd(newName.trim(), selectedAvatar);
+      let finalAvatar = selectedAvatar;
+      
+      if (avatarType === 'emoji') {
+         const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#f8f9f5" rx="20" ry="20"/><text y=".9em" font-size="80" x="50" text-anchor="middle">${emojiChar}</text></svg>`;
+         finalAvatar = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      } else if (avatarType === 'upload' && uploadedAvatar) {
+         finalAvatar = uploadedAvatar;
+      }
+
+      onAdd(newName.trim(), finalAvatar);
       setNewName('');
+      setUploadedAvatar('');
       setIsAddModalOpen(false);
     }
   };
@@ -267,21 +315,78 @@ const Members: React.FC<MembersProps> = ({ currentUser, members, onSwitch, onAdd
             </div>
             
             <div className="space-y-6">
+              {/* Avatar Preview */}
               <div className="flex flex-col items-center">
-                <div className="w-24 h-24 rounded-full border-4 border-stitch overflow-hidden mb-4 p-1 bg-white sticker-shadow">
-                  <img src={selectedAvatar} alt="preview" className="w-full h-full rounded-full object-cover" />
+                <div className="w-24 h-24 rounded-full border-4 border-stitch overflow-hidden mb-4 p-1 bg-white sticker-shadow flex items-center justify-center">
+                   {avatarType === 'emoji' ? (
+                      <span className="text-6xl">{emojiChar}</span>
+                   ) : (
+                      <img src={avatarType === 'upload' && uploadedAvatar ? uploadedAvatar : selectedAvatar} alt="preview" className="w-full h-full rounded-full object-cover" />
+                   )}
                 </div>
-                <div className="flex gap-2 overflow-x-auto w-full pb-2 scrollbar-hide">
-                  {avatarOptions.map((av, idx) => (
-                    <button 
-                      key={idx} 
-                      onClick={() => setSelectedAvatar(av)}
-                      className={`flex-shrink-0 w-10 h-10 rounded-full border-2 transition-all ${selectedAvatar === av ? 'border-stitch scale-110' : 'border-transparent opacity-50'}`}
-                    >
-                      <img src={av} alt="option" className="w-full h-full rounded-full object-cover" />
-                    </button>
-                  ))}
+
+                {/* Avatar Type Selector */}
+                <div className="flex gap-2 p-1 bg-cream rounded-xl border border-accent/60 mb-3">
+                   <button onClick={() => setAvatarType('preset')} className={`p-2 rounded-lg ${avatarType === 'preset' ? 'bg-white shadow-sm text-navy' : 'text-navy/40'}`}><ImageIcon size={16} /></button>
+                   <button onClick={() => setAvatarType('emoji')} className={`p-2 rounded-lg ${avatarType === 'emoji' ? 'bg-white shadow-sm text-navy' : 'text-navy/40'}`}><Smile size={16} /></button>
+                   <button onClick={() => setAvatarType('upload')} className={`p-2 rounded-lg ${avatarType === 'upload' ? 'bg-white shadow-sm text-navy' : 'text-navy/40'}`}><Upload size={16} /></button>
                 </div>
+                
+                {/* Inputs based on type */}
+                {avatarType === 'preset' && (
+                  <div className="flex gap-2 overflow-x-auto w-full pb-2 scrollbar-hide px-2">
+                    {avatarOptions.map((av, idx) => (
+                      <button 
+                        key={idx} 
+                        onClick={() => setSelectedAvatar(av)}
+                        className={`flex-shrink-0 w-10 h-10 rounded-full border-2 transition-all ${selectedAvatar === av ? 'border-stitch scale-110' : 'border-transparent opacity-50'}`}
+                      >
+                        <img src={av} alt="option" className="w-full h-full rounded-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {avatarType === 'emoji' && (
+                  <div className="w-full">
+                     <input 
+                       type="text" 
+                       maxLength={2}
+                       value={emojiChar} 
+                       onChange={e => setEmojiChar(e.target.value)} 
+                       className="w-full text-center text-4xl bg-white border-b-2 border-accent focus:border-stitch outline-none py-2"
+                     />
+                     <p className="text-center text-[10px] uppercase font-bold text-navy/30 mt-1">Type an Emoji</p>
+                  </div>
+                )}
+
+                {avatarType === 'upload' && (
+                  <div 
+                    className="w-full h-24 border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center cursor-pointer bg-white relative overflow-hidden group hover:border-stitch/50 transition-colors"
+                    onClick={() => document.getElementById('member-avatar-upload')?.click()}
+                  >
+                     {uploadedAvatar ? (
+                        <div className="relative w-full h-full group-hover:opacity-50 transition-opacity">
+                           <img src={uploadedAvatar} className="w-full h-full object-cover" />
+                           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                             <Camera size={20} className="text-navy" />
+                           </div>
+                        </div>
+                     ) : (
+                        <>
+                           <Camera size={20} className="text-stitch mb-1" />
+                           <span className="text-[10px] font-black text-navy/40 uppercase">Tap to Upload</span>
+                        </>
+                     )}
+                     <input 
+                       id="member-avatar-upload"
+                       type="file" 
+                       accept="image/*"
+                       onChange={handleAvatarUpload}
+                       className="hidden" 
+                     />
+                  </div>
+                )}
               </div>
 
               <div className="bg-cream p-4 rounded-2xl border border-accent">

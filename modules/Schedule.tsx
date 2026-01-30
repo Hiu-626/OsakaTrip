@@ -21,7 +21,10 @@ import {
   Edit2,
   Clock,
   ShoppingBag,
-  Utensils
+  Utensils,
+  Smile,
+  Image as ImageIcon,
+  Camera
 } from 'lucide-react';
 import { TripConfig, ScheduleItem, Category, TripMember, Booking } from '../types';
 import { COLORS } from '../constants';
@@ -79,7 +82,12 @@ const Schedule: React.FC<ScheduleProps> = ({
   // New state for "Move to Day" modal
   const [movingItem, setMovingItem] = useState<ScheduleItem | null>(null);
 
+  // Add Member States
   const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberAvatarType, setNewMemberAvatarType] = useState<'emoji' | 'upload' | 'random'>('emoji');
+  const [newMemberEmoji, setNewMemberEmoji] = useState('😎');
+  const [uploadedAvatar, setUploadedAvatar] = useState('');
+
   const [draggedData, setDraggedData] = useState<{ item: ScheduleItem, source: 'pool' | 'schedule' } | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [isPoolDragOver, setIsPoolDragOver] = useState(false);
@@ -249,11 +257,49 @@ const Schedule: React.FC<ScheduleProps> = ({
     setIsAddModalOpen(false);
   };
 
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.src = ev.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const size = 200; // Resize to 200x200 for avatar
+          canvas.width = size;
+          canvas.height = size;
+          
+          // Center crop calculation
+          const ratio = Math.max(size / img.width, size / img.height);
+          const centerShift_x = (size - img.width * ratio) / 2;
+          const centerShift_y = (size - img.height * ratio) / 2;
+          
+          ctx?.drawImage(img, 0, 0, img.width, img.height, centerShift_x, centerShift_y, img.width * ratio, img.height * ratio);
+          setUploadedAvatar(canvas.toDataURL('image/jpeg', 0.8));
+        };
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleAddMemberSubmit = () => {
     if (newMemberName.trim()) {
-      const randomId = Math.floor(Math.random() * 1000);
-      onAddMember(newMemberName.trim(), `https://picsum.photos/seed/${newMemberName}${randomId}/200`);
+      let avatarUrl = '';
+      if (newMemberAvatarType === 'emoji') {
+         const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#f8f9f5" rx="20" ry="20"/><text y=".9em" font-size="80" x="50" text-anchor="middle">${newMemberEmoji}</text></svg>`;
+         avatarUrl = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+      } else if (newMemberAvatarType === 'upload' && uploadedAvatar) {
+         avatarUrl = uploadedAvatar;
+      } else {
+         const randomId = Math.floor(Math.random() * 1000);
+         avatarUrl = `https://picsum.photos/seed/${newMemberName}${randomId}/200`;
+      }
+      
+      onAddMember(newMemberName.trim(), avatarUrl);
       setNewMemberName('');
+      setUploadedAvatar('');
     }
   };
 
@@ -601,9 +647,78 @@ const Schedule: React.FC<ScheduleProps> = ({
                        </div>
                     ))}
                  </div>
-                 <div className="flex gap-2">
-                    <input type="text" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="New Name" className="flex-1 p-3 bg-white border border-accent rounded-xl text-sm font-bold" />
-                    <button onClick={handleAddMemberSubmit} disabled={!newMemberName.trim()} className="px-4 bg-navy text-white rounded-xl font-black"><Plus size={20} /></button>
+                 
+                 {/* New Member Input Area */}
+                 <div className="bg-cream p-4 rounded-xl border border-accent/60 space-y-3">
+                    <p className="text-[10px] font-black uppercase text-navy/30 tracking-widest">Add New Member</p>
+                    <input type="text" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="Name" className="w-full p-3 bg-white border border-accent rounded-xl text-sm font-bold focus:ring-2 focus:ring-stitch outline-none" />
+                    
+                    {/* Avatar Type Selector */}
+                    <div className="flex gap-1 p-1 bg-white rounded-lg border border-accent/40">
+                       <button 
+                         onClick={() => setNewMemberAvatarType('emoji')}
+                         className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'emoji' ? 'bg-donald text-navy shadow-sm' : 'text-navy/30'}`}
+                       >
+                         <Smile size={12} /> Emoji
+                       </button>
+                       <button 
+                         onClick={() => setNewMemberAvatarType('upload')}
+                         className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'upload' ? 'bg-stitch text-white shadow-sm' : 'text-navy/30'}`}
+                       >
+                         <Upload size={12} /> Upload
+                       </button>
+                       <button 
+                         onClick={() => setNewMemberAvatarType('random')}
+                         className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'random' ? 'bg-white border text-navy shadow-sm' : 'text-navy/30'}`}
+                       >
+                         <ImageIcon size={12} /> Random
+                       </button>
+                    </div>
+
+                    {/* Conditional Input */}
+                    {newMemberAvatarType === 'emoji' && (
+                       <div className="flex items-center gap-2">
+                          <input 
+                            type="text" 
+                            maxLength={2}
+                            value={newMemberEmoji} 
+                            onChange={e => setNewMemberEmoji(e.target.value)} 
+                            className="w-12 h-12 text-center text-2xl bg-white border border-accent rounded-xl focus:ring-2 focus:ring-donald outline-none" 
+                          />
+                          <p className="text-[10px] text-navy/40 font-bold">Pick an emoji avatar!</p>
+                       </div>
+                    )}
+
+                    {newMemberAvatarType === 'upload' && (
+                       <div 
+                         className="w-full h-24 border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center cursor-pointer bg-white relative overflow-hidden"
+                         onClick={() => document.getElementById('setting-avatar-upload')?.click()}
+                       >
+                          {uploadedAvatar ? (
+                             <img src={uploadedAvatar} className="w-full h-full object-cover" />
+                          ) : (
+                             <>
+                                <Camera size={20} className="text-stitch mb-1" />
+                                <span className="text-[10px] font-black text-navy/40 uppercase">Tap to Upload</span>
+                             </>
+                          )}
+                          <input 
+                            id="setting-avatar-upload"
+                            type="file" 
+                            accept="image/*"
+                            onChange={handleAvatarUpload}
+                            className="hidden" 
+                          />
+                       </div>
+                    )}
+
+                    {newMemberAvatarType === 'random' && (
+                       <p className="text-[10px] text-navy/40 font-bold px-1">A random cute photo will be assigned.</p>
+                    )}
+
+                    <button onClick={handleAddMemberSubmit} disabled={!newMemberName.trim()} className="w-full py-3 bg-navy text-white rounded-xl font-black flex items-center justify-center gap-2 disabled:opacity-50 mt-2">
+                       <Plus size={16} /> Add Member
+                    </button>
                  </div>
                </div>
 
