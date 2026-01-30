@@ -6,10 +6,15 @@ export const COLORS = {
   donald: '#FFD966',
   navy: '#1F3C88',
   cream: '#F8F9F5',
-  attraction: '#A3D166',
-  food: '#FF9E9E',
-  transport: '#6EC1E4',
-  stay: '#FFD966'
+  
+  // Categories
+  attraction: '#A3D166',    // Green
+  restaurant: '#FF9E9E',    // Salmon/Pink (Replacing Food)
+  food: '#FF9E9E',          // Fallback for old data
+  transport: '#6EC1E4',     // Blue
+  stay: '#FFD966',          // Yellow
+  shopping: '#F4A261',      // Orange (New)
+  other: '#A8DADC'          // Teal
 };
 
 export const MOCK_MEMBERS: TripMember[] = [

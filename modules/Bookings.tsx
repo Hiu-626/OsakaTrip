@@ -27,7 +27,8 @@ import {
   ChevronUp,
   ChevronDown,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Link
 } from 'lucide-react';
 import { Booking, TripMember, ScheduleItem } from '../types';
 import { GoogleGenAI } from "@google/genai";
@@ -51,7 +52,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
         bookedBy: '1',
         cost: 0,
         imageUrl: 'https://picsum.photos/seed/flight/600/200',
-        details: { from: 'HKG', to: 'NRT', date: '12 OCT', time: '09:15', arrivalTime: '14:30', seat: '24A', gate: 'B12', airline: 'Cathay' }
+        details: { from: 'HKG', to: 'NRT', date: '12 OCT', time: '09:15', arrivalTime: '14:30', seat: '24A', gate: 'B12', airline: 'Cathay', class: 'Economy', flightNo: 'CX504' }
       },
       {
         id: '2',
@@ -66,7 +67,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     ];
   });
 
-  const [itinerary] = useState<ScheduleItem[]>(() => {
+  const [itinerary, setItinerary] = useState<ScheduleItem[]>(() => {
     const saved = localStorage.getItem('itinerary');
     return saved ? JSON.parse(saved) : [];
   });
@@ -85,8 +86,12 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
   }, [bookings]);
 
   useEffect(() => {
+    // Refresh itinerary data when modal opens to get latest schedule items
+    const saved = localStorage.getItem('itinerary');
+    if (saved) setItinerary(JSON.parse(saved));
+
     if (highlightId) setExpandedId(highlightId);
-  }, [highlightId]);
+  }, [highlightId, isModalOpen]);
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -651,6 +656,11 @@ const BookingFormModal: React.FC<{
                       address: string,
                       checkIn: string (YYYY-MM-DD),
                       checkOut: string (YYYY-MM-DD),
+                      airline: string,
+                      flightNo: string,
+                      class: string,
+                      room: string,
+                      vehicle: string
                    }
                  }
                  Return ONLY JSON.`
@@ -778,6 +788,12 @@ const BookingFormModal: React.FC<{
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">Departure</label><input type="time" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.time || ''} onChange={e => updateDetail('time', e.target.value)} /></div>
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">Arrival</label><input type="time" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.arrivalTime || ''} onChange={e => updateDetail('arrivalTime', e.target.value)} /></div>
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">Gate</label><input type="text" placeholder="-" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.gate || ''} onChange={e => updateDetail('gate', e.target.value)} /></div>
+                 
+                 {/* Added Missing Flight Fields */}
+                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Airline</label><input type="text" placeholder="Cathay" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.airline || ''} onChange={e => updateDetail('airline', e.target.value)} /></div>
+                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Flight No</label><input type="text" placeholder="CX100" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.flightNo || ''} onChange={e => updateDetail('flightNo', e.target.value)} /></div>
+                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Class</label><input type="text" placeholder="Economy" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.class || ''} onChange={e => updateDetail('class', e.target.value)} /></div>
+                 <div><label className="text-[9px] uppercase opacity-40 font-bold block">Seat</label><input type="text" placeholder="1A" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.seat || ''} onChange={e => updateDetail('seat', e.target.value)} /></div>
               </>
             )}
             
@@ -786,6 +802,14 @@ const BookingFormModal: React.FC<{
                  <div className="col-span-2"><label className="text-[9px] uppercase opacity-40 font-bold block">Address/Pick up</label><input type="text" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.address || ''} onChange={e => updateDetail('address', e.target.value)} /></div>
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">Check In/Start</label><input type="date" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.checkIn || ''} onChange={e => updateDetail('checkIn', e.target.value)} /></div>
                  <div><label className="text-[9px] uppercase opacity-40 font-bold block">Check Out/End</label><input type="date" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.checkOut || ''} onChange={e => updateDetail('checkOut', e.target.value)} /></div>
+                 
+                 {/* Added Missing Hotel/Car Fields */}
+                 {formData.type === 'Hotel' && (
+                     <div className="col-span-2"><label className="text-[9px] uppercase opacity-40 font-bold block">Room Type</label><input type="text" placeholder="e.g. Double Room" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.room || ''} onChange={e => updateDetail('room', e.target.value)} /></div>
+                 )}
+                 {formData.type === 'Car' && (
+                     <div className="col-span-2"><label className="text-[9px] uppercase opacity-40 font-bold block">Vehicle Model</label><input type="text" placeholder="e.g. Toyota Alphard" className="w-full font-bold bg-cream/50 p-2 rounded-lg" value={formData.details?.vehicle || ''} onChange={e => updateDetail('vehicle', e.target.value)} /></div>
+                 )}
                </>
             )}
 
@@ -797,6 +821,36 @@ const BookingFormModal: React.FC<{
             )}
           </div>
         </div>
+
+        {/* Link to Schedule Card Section */}
+        <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow space-y-4">
+             <div>
+                <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block flex items-center gap-1">
+                  <Link size={12} /> Link to Schedule Card
+                </label>
+                <div className="relative">
+                   <select 
+                      value={formData.linkedScheduleId || ''} 
+                      onChange={e => setFormData({ ...formData, linkedScheduleId: e.target.value })}
+                      className="w-full appearance-none bg-cream border border-accent rounded-xl p-3 font-bold text-navy text-sm focus:ring-2 focus:ring-stitch outline-none"
+                   >
+                      <option value="">-- No Link --</option>
+                      {itinerary.sort((a,b) => a.dayIndex - b.dayIndex || a.time.localeCompare(b.time)).map(item => (
+                         <option key={item.id} value={item.id}>
+                            {item.dayIndex === -1 ? '(Pool)' : `Day ${item.dayIndex + 1}`} - {item.time} {item.location}
+                         </option>
+                      ))}
+                   </select>
+                   <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                      <ChevronDown size={16} />
+                   </div>
+                </div>
+                <p className="text-[9px] text-navy/30 mt-2 leading-tight">
+                   Linking adds a quick button on the schedule card to open this ticket.
+                </p>
+             </div>
+        </div>
+
       </div>
     </div>
   );

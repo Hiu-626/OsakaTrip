@@ -2,8 +2,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { TripMember, Expense as ExpenseType } from '../types';
 import { 
-  TrendingDown, 
-  CreditCard, 
   Plus, 
   Trash2, 
   Edit2, 
@@ -11,327 +9,429 @@ import {
   Check, 
   Calculator, 
   RefreshCw, 
-  Search, 
-  ArrowRightLeft, 
-  Calendar,
-  Settings2,
-  TrendingUp,
-  CircleDollarSign,
+  Settings2, 
+  TrendingUp, 
+  TrendingDown, 
   ArrowRight,
+  Wallet,
   ChevronDown,
-  ExternalLink
+  Coins,
+  Calendar,
+  Tag,
+  PieChart
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import { COLORS } from '../constants';
 
 const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({ currentUser, members }) => {
+  // --- Data States ---
   const [expenses, setExpenses] = useState<ExpenseType[]>(() => {
     const saved = localStorage.getItem('expenses');
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [rates, setRates] = useState<Record<string, number>>({ JPY: 1, HKD: 19.2, AUD: 96.5 });
-  const [rateSources, setRateSources] = useState<{title?: string, uri?: string}[]>([]);
-  const [baseCurrency, setBaseCurrency] = useState<'JPY' | 'HKD' | 'AUD'>(() => {
-    return (localStorage.getItem('baseCurrency') as any) || 'JPY';
+  // --- Currency System States ---
+  // Active currencies list (e.g. ['JPY', 'HKD'])
+  const [activeCurrencies, setActiveCurrencies] = useState<string[]>(() => {
+    const saved = localStorage.getItem('activeCurrencies');
+    return saved ? JSON.parse(saved) : ['JPY', 'HKD', 'AUD'];
   });
-  const [loadingRates, setLoadingRates] = useState(false);
+
+  // Exchange rates relative to JPY (Pivot: 1 Unit Currency = X JPY)
+  // Example: HKD: 19.5 means 1 HKD = 19.5 JPY
+  const [rates, setRates] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('exchangeRates');
+    return saved ? JSON.parse(saved) : { JPY: 1, HKD: 19.2, AUD: 96.5, USD: 150.0, EUR: 162.0, TWD: 4.7 };
+  });
+
+  // User's preferred display currency
+  const [displayCurrency, setDisplayCurrency] = useState<string>(() => {
+    return localStorage.getItem('displayCurrency') || 'HKD';
+  });
+
+  // --- UI States ---
+  const [expandedId, setExpandedId] = useState<string | null>(null); // For push-down expansion
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Bottom Drawer for Currencies
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
-  const [isCalcOpen, setIsCalcOpen] = useState(false);
-  const [isCurrencySettingsOpen, setIsCurrencySettingsOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseType | null>(null);
+  const [loadingRates, setLoadingRates] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('expenses', JSON.stringify(expenses));
-  }, [expenses]);
+  // Common world currencies for selection
+  const AVAILABLE_CURRENCIES = ['JPY', 'HKD', 'AUD', 'USD', 'EUR', 'GBP', 'TWD', 'KRW', 'SGD', 'CNY', 'THB'];
 
-  useEffect(() => {
-    localStorage.setItem('baseCurrency', baseCurrency);
-  }, [baseCurrency]);
+  // --- Effects ---
+  useEffect(() => { localStorage.setItem('expenses', JSON.stringify(expenses)); }, [expenses]);
+  useEffect(() => { localStorage.setItem('activeCurrencies', JSON.stringify(activeCurrencies)); }, [activeCurrencies]);
+  useEffect(() => { localStorage.setItem('exchangeRates', JSON.stringify(rates)); }, [rates]);
+  useEffect(() => { localStorage.setItem('displayCurrency', displayCurrency); }, [displayCurrency]);
 
-  const fetchLiveRates = async () => {
+  // --- Helpers ---
+  // Convert any amount from source currency to target currency using JPY as pivot
+  const convert = (amount: number, from: string, to: string) => {
+    const rateFrom = rates[from] || 1; // Rate is "How many JPY is 1 unit of X"
+    const rateTo = rates[to] || 1;
+    const amountInJPY = amount * rateFrom;
+    return amountInJPY / rateTo;
+  };
+
+  const formatMoney = (amount: number, currency: string) => {
+    return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })}`;
+  };
+
+  const getCategoryColor = (cat: string) => {
+    const map: Record<string, string> = {
+      'Food': COLORS.restaurant,
+      'Restaurant': COLORS.restaurant,
+      'Transport': COLORS.transport,
+      'Stay': COLORS.stay,
+      'Shopping': COLORS.shopping,
+      'Attraction': COLORS.attraction,
+      'Ticket': COLORS.attraction,
+      'Other': COLORS.other
+    };
+    return map[cat] || COLORS.other;
+  };
+
+  // --- Smart Settlement Logic ---
+  const balances = useMemo(() => {
+    const bal: Record<string, number> = {};
+    members.forEach(m => bal[m.id] = 0);
+    
+    expenses.forEach(exp => {
+      // 1. Normalize everything to JPY (Pivot)
+      const amountInJPY = exp.amount * (rates[exp.currency] || 1);
+      
+      // 2. Calculate Payer credit
+      bal[exp.paidBy] += amountInJPY;
+      
+      // 3. Calculate Debtor share
+      const splitCount = exp.splitWith.length || 1;
+      const shareInJPY = amountInJPY / splitCount;
+      
+      exp.splitWith.forEach(id => {
+        if (bal[id] !== undefined) bal[id] -= shareInJPY;
+      });
+    });
+    return bal;
+  }, [expenses, rates, members]);
+
+  // Total spent in Display Currency
+  const totalSpentDisplay = useMemo(() => {
+    const totalJPY = expenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
+    return convert(totalJPY, 'JPY', displayCurrency);
+  }, [expenses, rates, displayCurrency]);
+
+  // Category Breakdown Logic
+  const categoryStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    let total = 0;
+    
+    expenses.forEach(exp => {
+      const val = convert(exp.amount, exp.currency, displayCurrency);
+      const cat = exp.category || 'Other';
+      stats[cat] = (stats[cat] || 0) + val;
+      total += val;
+    });
+
+    return Object.entries(stats)
+      .map(([name, value]) => ({ 
+        name, 
+        value, 
+        percent: total > 0 ? (value / total) * 100 : 0 
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [expenses, rates, displayCurrency]);
+
+  // --- Gemini Rate Sync ---
+  const fetchRates = async () => {
+    if (!process.env.API_KEY) {
+      alert("Missing API Key");
+      return;
+    }
     setLoadingRates(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // We ask for rates of all active currencies against JPY
+      const currenciesToFetch = activeCurrencies.filter(c => c !== 'JPY').join(', ');
+      
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "Find current real-time exchange rates for 1 HKD to JPY and 1 AUD to JPY. Numerical values only.",
-        config: { tools: [{ googleSearch: {} }] }
+        contents: `Get real-time exchange rates for 1 unit of [${currenciesToFetch}] to JPY. Return valid JSON only, like {"HKD": 19.5, "USD": 150.2}.`,
+        config: { responseMimeType: "application/json" }
       });
-      const text = response.text || "";
-      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
-        ?.map((chunk: any) => chunk.web).filter(Boolean) || [];
-      setRateSources(sources);
-
-      const hkdMatch = text.match(/HKD\D+(\d+\.?\d*)/i);
-      const audMatch = text.match(/AUD\D+(\d+\.?\d*)/i);
-      if (hkdMatch || audMatch) {
-        setRates(prev => ({
-          ...prev,
-          HKD: hkdMatch ? parseFloat(hkdMatch[1]) : prev.HKD,
-          AUD: audMatch ? parseFloat(audMatch[1]) : prev.AUD
-        }));
-      }
+      
+      const jsonText = response.text || "{}";
+      const newRatesData = JSON.parse(jsonText);
+      
+      setRates(prev => ({ ...prev, ...newRatesData, JPY: 1 }));
+      alert("匯率已更新！ (Rates updated)");
     } catch (e) {
-      console.error("Rates fetch failed", e);
+      console.error(e);
+      alert("匯率更新失敗 (Failed to update rates).");
     } finally {
       setLoadingRates(false);
     }
   };
 
-  const balances = useMemo(() => {
-    const bal: Record<string, number> = {};
-    members.forEach(m => bal[m.id] = 0);
-    expenses.forEach(exp => {
-      const amountJPY = exp.amount * (rates[exp.currency as keyof typeof rates] || 1);
-      const share = amountJPY / (exp.splitWith.length || 1);
-      if (bal[exp.paidBy] !== undefined) bal[exp.paidBy] += amountJPY;
-      exp.splitWith.forEach(id => {
-        if (bal[id] !== undefined) bal[id] -= share;
-      });
-    });
-    return bal;
-  }, [expenses, members, rates]);
-
-  const settlementSuggestions = useMemo(() => {
-    const people = Object.entries(balances).map(([id, balance]) => ({ id, balance }));
-    const debtors = people.filter(p => p.balance < -0.01).sort((a, b) => a.balance - b.balance);
-    const creditors = people.filter(p => p.balance > 0.01).sort((a, b) => b.balance - a.balance);
-    const transactions: Array<{ from: string; to: string; amount: number }> = [];
-    const dCopy = debtors.map(d => ({ ...d }));
-    const cCopy = creditors.map(c => ({ ...c }));
-    let dIdx = 0, cIdx = 0;
-    while (dIdx < dCopy.length && cIdx < cCopy.length) {
-      const amount = Math.min(Math.abs(dCopy[dIdx].balance), cCopy[cIdx].balance);
-      transactions.push({ from: dCopy[dIdx].id, to: cCopy[cIdx].id, amount });
-      dCopy[dIdx].balance += amount;
-      cCopy[cIdx].balance -= amount;
-      if (Math.abs(dCopy[dIdx].balance) < 0.01) dIdx++;
-      if (Math.abs(cCopy[cIdx].balance) < 0.01) cIdx++;
-    }
-    return transactions;
-  }, [balances]);
-
-  const myBalanceJPY = balances[currentUser.id] || 0;
-  const totalSpentJPY = expenses.reduce((acc, exp) => acc + (exp.amount * (rates[exp.currency as keyof typeof rates] || 1)), 0);
-
-  const convertFromJPY = (amount: number, target: string) => {
-    if (target === 'JPY') return amount;
-    return amount / (rates[target as keyof typeof rates] || 1);
-  };
-
-  const getCurrencySymbol = (cur: string) => cur === 'JPY' ? '¥' : '$';
-
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in duration-500">
-      {/* 總額儀表板 */}
-      <div className="bg-white/80 backdrop-blur-sm p-6 rounded-3xl-sticker sticker-shadow border border-stitch/20 relative overflow-hidden">
+    <div className="space-y-6 pb-24 animate-in fade-in duration-500 relative min-h-screen">
+      
+      {/* --- DASHBOARD --- */}
+      <div className="bg-white/90 backdrop-blur-md p-6 rounded-3xl-sticker sticker-shadow border border-stitch/20 relative overflow-hidden">
+        {/* Background Decor */}
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-donald/10 rounded-full blur-3xl pointer-events-none" />
+        
         <div className="relative z-10">
-          <div className="flex justify-between items-center mb-1">
-             <div className="flex items-center gap-1">
-               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-navy/30">旅程總支出估算</p>
-             </div>
-             <div className="flex bg-cream p-1 rounded-lg">
-                {(['JPY', 'HKD', 'AUD'] as const).map(cur => (
-                  <button 
-                    key={cur}
-                    onClick={() => setBaseCurrency(cur)}
-                    className={`text-[9px] font-black px-3 py-1.5 rounded-md transition-all ${baseCurrency === cur ? 'bg-navy text-white shadow-sm' : 'text-navy/20 hover:text-navy/40'}`}
-                  >
-                    {cur}
-                  </button>
-                ))}
-             </div>
-          </div>
-          <h2 className="text-4xl font-black text-navy flex items-baseline gap-1">
-            <span className="text-xl opacity-30 font-bold">{getCurrencySymbol(baseCurrency)}</span>
-            {Math.round(convertFromJPY(totalSpentJPY, baseCurrency)).toLocaleString()}
-          </h2>
-          
-          <div className="mt-8 flex gap-3">
-            <button 
-              onClick={() => { setEditingExpense(null); setIsModalOpen(true); }}
-              className="flex-1 bg-stitch text-white py-4 rounded-2xl-sticker font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 sticker-shadow active:scale-95 transition-all"
-            >
-              <Plus size={16} /> 新增支出
-            </button>
-            <button 
-              onClick={() => setIsSettlementOpen(true)}
-              className="px-6 bg-donald/40 text-navy py-4 rounded-2xl-sticker font-black text-[11px] uppercase tracking-widest border border-donald/50 sticker-shadow active:scale-95 transition-all"
-            >
-              結算建議
-            </button>
-          </div>
+           {/* Top Row: Label & Settings */}
+           <div className="flex justify-between items-center mb-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-navy/30">Total Trip Spending</p>
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="flex items-center gap-1 px-2 py-1 bg-cream rounded-lg text-[9px] font-black text-navy/40 hover:text-stitch transition-colors"
+              >
+                 <Settings2 size={12} /> Manage
+              </button>
+           </div>
+
+           {/* Main Amount - Click currency to switch */}
+           <div className="flex items-baseline gap-2 mb-6">
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="text-2xl font-black text-stitch/80 hover:bg-stitch/10 px-2 rounded-lg transition-colors flex items-center gap-1"
+              >
+                 {displayCurrency} <ChevronDown size={16} />
+              </button>
+              <h1 className="text-5xl font-black text-navy tracking-tight">
+                 {Math.round(totalSpentDisplay).toLocaleString()}
+              </h1>
+           </div>
+
+           {/* Action Buttons */}
+           <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => { setEditingExpense(null); setIsModalOpen(true); }}
+                className="bg-stitch text-white py-3.5 rounded-2xl-sticker font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 sticker-shadow active:scale-95 transition-all shadow-lg shadow-stitch/20"
+              >
+                 <Plus size={16} /> Record
+              </button>
+              <button 
+                onClick={() => setIsSettlementOpen(true)}
+                className="bg-white text-navy border border-accent py-3.5 rounded-2xl-sticker font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 sticker-shadow active:scale-95 transition-all"
+              >
+                 <Wallet size={16} /> Quick Settle
+              </button>
+           </div>
         </div>
       </div>
 
-      {/* 個人收支卡片 */}
-      <div className={`p-5 rounded-2xl-sticker sticker-shadow border-2 transition-all duration-300 bg-white ${myBalanceJPY >= 0 ? 'border-stitch/10 bg-stitch/5' : 'border-red-50 bg-red-50/30'}`}>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-             <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors shadow-sm ${myBalanceJPY >= 0 ? 'bg-white text-stitch' : 'bg-white text-red-300'}`}>
-               {myBalanceJPY >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
-             </div>
-             <div>
-                <p className="text-[9px] font-black text-navy/20 uppercase tracking-[0.2em]">{currentUser.name} 的分帳狀態</p>
-                <h3 className={`text-xl font-black ${myBalanceJPY >= 0 ? 'text-stitch' : 'text-red-300'}`}>
-                  {myBalanceJPY >= 0 ? '應收回' : '應支付'} 
-                  <span className="ml-2 font-black">
-                    {getCurrencySymbol(baseCurrency)}{Math.abs(Math.round(convertFromJPY(myBalanceJPY, baseCurrency))).toLocaleString()}
-                  </span>
-                </h3>
-             </div>
-          </div>
-          <button onClick={() => setIsCalcOpen(true)} className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-navy/20 active:scale-90 sticker-shadow border border-accent/30">
-            <Calculator size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* 歷史紀錄 */}
-      <div className="space-y-4 pt-2">
-        <div className="flex justify-between items-center px-1">
-           <h3 className="text-[11px] font-black text-navy/20 uppercase tracking-[0.3em] flex items-center gap-2">
-              <ArrowRightLeft size={12} /> 記帳日誌
+      {/* --- CATEGORY BREAKDOWN (Replaces Stitch Balance) --- */}
+      <div className="bg-white p-5 rounded-2xl-sticker sticker-shadow border border-accent/40 relative overflow-hidden">
+        <div className="flex justify-between items-center mb-4">
+           <h3 className="text-[10px] font-black text-navy/30 uppercase tracking-[0.2em] flex items-center gap-1">
+             <PieChart size={12} /> Breakdown
            </h3>
-           <button onClick={() => setIsCurrencySettingsOpen(true)} className="text-navy/20 hover:text-stitch transition-colors">
-              <Settings2 size={14} />
-           </button>
+           <span className="text-[9px] font-bold text-navy/20">in {displayCurrency}</span>
         </div>
-
-        {expenses.length > 0 ? expenses.map((exp) => {
-          const payer = members.find(m => m.id === exp.paidBy);
-          return (
-            <div key={exp.id} className="bg-white p-4 rounded-xl-sticker sticker-shadow border border-accent/30 flex items-center gap-4 group hover:border-stitch/40 transition-all">
-              <div className="relative flex-shrink-0">
-                <img src={payer?.avatar} alt={payer?.name} className="w-12 h-12 rounded-full object-cover border-2 border-accent shadow-inner" />
+        
+        <div className="space-y-4">
+          {categoryStats.length > 0 ? categoryStats.map((stat, idx) => (
+            <div key={stat.name} className="relative group">
+              <div className="flex justify-between items-end mb-1.5 z-10 relative">
+                 <div className="flex items-center gap-2">
+                    <span 
+                       className="w-2 h-2 rounded-full" 
+                       style={{ backgroundColor: getCategoryColor(stat.name) }}
+                    />
+                    <span className="text-xs font-black text-navy">{stat.name}</span>
+                 </div>
+                 <div className="text-right flex items-baseline gap-2">
+                   <span className="text-[10px] font-bold text-navy/40">{Math.round(stat.value).toLocaleString()}</span>
+                   <span className="text-xs font-black text-navy">{Math.round(stat.percent)}%</span>
+                 </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="font-black text-navy text-sm truncate">{exp.category}</h4>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[9px] font-black text-stitch/70 uppercase">{payer?.name} 付款</span>
-                  <span className="text-[9px] font-bold text-navy/20 uppercase">{exp.date}</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-black text-navy text-sm">
-                  {exp.currency} {exp.amount.toLocaleString()}
-                </p>
-                {exp.currency !== baseCurrency && (
-                  <p className="text-[9px] font-bold text-navy/10">
-                    ≈ {baseCurrency} {Math.round(convertFromJPY(exp.amount * (rates[exp.currency as keyof typeof rates] || 1), baseCurrency)).toLocaleString()}
-                  </p>
-                )}
-                <div className="flex gap-2 justify-end mt-1.5 opacity-0 group-hover:opacity-100">
-                   <button onClick={() => { setEditingExpense(exp); setIsModalOpen(true); }} className="p-1 text-navy/10 hover:text-stitch"><Edit2 size={12} /></button>
-                   <button onClick={() => setExpenses(expenses.filter(e => e.id !== exp.id))} className="p-1 text-navy/10 hover:text-red-400"><Trash2 size={12} /></button>
-                </div>
+              
+              <div className="w-full h-2.5 bg-cream rounded-full overflow-hidden">
+                 <div 
+                   className="h-full rounded-full transition-all duration-1000 ease-out"
+                   style={{ 
+                     width: `${stat.percent}%`,
+                     backgroundColor: getCategoryColor(stat.name) 
+                   }}
+                 />
               </div>
             </div>
-          );
-        }) : (
-          <div className="py-24 text-center opacity-10 border-2 border-dashed border-accent rounded-3xl">
-            <CreditCard size={48} className="mx-auto mb-3" />
-            <p className="font-black uppercase text-[10px] tracking-widest italic">還沒有任何支出喔！</p>
-          </div>
-        )}
+          )) : (
+            <div className="py-4 text-center opacity-30 text-[10px] font-bold text-navy uppercase tracking-widest">
+               No spending data yet
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 結算建議 Modal */}
-      {isSettlementOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={() => setIsSettlementOpen(false)}>
-          <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/30 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h3 className="text-lg font-black text-navy uppercase tracking-widest">結算計畫</h3>
-                <p className="text-[9px] font-bold text-navy/20 uppercase mt-2">如何最快平帳 ({baseCurrency})</p>
-              </div>
-              <button onClick={() => setIsSettlementOpen(false)} className="p-2 bg-cream rounded-full text-navy/20 active:scale-90"><X size={20} /></button>
-            </div>
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-              {settlementSuggestions.length > 0 ? settlementSuggestions.map((tx, idx) => {
-                const from = members.find(m => m.id === tx.from);
-                const to = members.find(m => m.id === tx.to);
-                return (
-                  <div key={idx} className="bg-cream p-4 rounded-2xl border border-accent/20 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex -space-x-2">
-                        <img src={from?.avatar} className="w-8 h-8 rounded-full border-2 border-white" />
-                        <img src={to?.avatar} className="w-8 h-8 rounded-full border-2 border-white" />
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black text-navy/40 uppercase mb-1">{from?.name} ➜ {to?.name}</p>
-                        <p className="font-black text-stitch text-sm">
-                          {getCurrencySymbol(baseCurrency)}{Math.round(convertFromJPY(tx.amount, baseCurrency)).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                    <ArrowRight size={16} className="text-navy/10" />
-                  </div>
-                );
-              }) : (
-                <div className="text-center py-12 opacity-40"><p className="font-black uppercase text-xs">旅程已結清！</p></div>
-              )}
-            </div>
-            <button onClick={() => setIsSettlementOpen(false)} className="w-full mt-8 py-4 bg-navy text-white font-black rounded-xl-sticker uppercase text-[11px] tracking-[0.2em]">關閉視窗</button>
-          </div>
-        </div>
-      )}
+      {/* --- EXPENSE LIST --- */}
+      <div className="space-y-4 pt-2">
+         <h3 className="text-[11px] font-black text-navy/20 uppercase tracking-[0.3em] flex items-center gap-2 px-1">
+            Activity Log
+         </h3>
 
-      {isCalcOpen && <CalculatorTool rates={rates} onClose={() => setIsCalcOpen(false)} />}
-      {isCurrencySettingsOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={() => setIsCurrencySettingsOpen(false)}>
-           <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-donald/30 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+         {expenses.length > 0 ? (
+           <div className="space-y-3">
+             {expenses.map((exp) => {
+               const payer = members.find(m => m.id === exp.paidBy);
+               const isExpanded = expandedId === exp.id;
+               
+               // Fallback if no title (for old data)
+               const displayName = exp.title || exp.category;
+               
+               return (
+                 <div 
+                   key={exp.id}
+                   onClick={() => setExpandedId(isExpanded ? null : exp.id)}
+                   className={`bg-white rounded-2xl-sticker border transition-all duration-300 overflow-hidden cursor-pointer ${isExpanded ? 'border-stitch shadow-lg scale-[1.01] z-10' : 'border-accent/40 sticker-shadow hover:border-stitch/30'}`}
+                 >
+                    {/* Collapsed View (Always Visible) */}
+                    <div className="p-4 flex items-center gap-4">
+                       {/* Icon / Category */}
+                       <div className="w-10 h-10 rounded-full bg-cream flex items-center justify-center text-lg shadow-inner flex-shrink-0" style={{ color: getCategoryColor(exp.category) }}>
+                          {exp.category === 'Food' || exp.category === 'Restaurant' ? '🍜' : 
+                           exp.category === 'Transport' ? '🚕' : 
+                           exp.category === 'Shopping' ? '🛍️' : 
+                           exp.category === 'Stay' ? '🏨' : 
+                           exp.category === 'Attraction' || exp.category === 'Ticket' ? '🎫' : '💸'}
+                       </div>
+
+                       {/* Main Details */}
+                       <div className="flex-1 min-w-0">
+                          <h4 className="font-black text-navy text-sm truncate">{displayName}</h4>
+                          <div className="flex items-center gap-2 mt-0.5">
+                             <img src={payer?.avatar} className="w-4 h-4 rounded-full border border-white" />
+                             <span className="text-[10px] font-bold text-navy/40 uppercase">{payer?.name} Paid</span>
+                          </div>
+                       </div>
+
+                       {/* Amount */}
+                       <div className="text-right">
+                          <p className="font-black text-navy text-sm">{formatMoney(exp.amount, exp.currency)}</p>
+                          <p className="text-[9px] font-bold text-navy/20">
+                             ≈ {displayCurrency} {Math.round(convert(exp.amount, exp.currency, displayCurrency)).toLocaleString()}
+                          </p>
+                       </div>
+                    </div>
+
+                    {/* Push-Down Expanded Content */}
+                    <div className={`bg-stitch/5 border-t border-stitch/10 overflow-hidden transition-[max-height, padding] duration-300 ease-in-out ${isExpanded ? 'max-h-40' : 'max-h-0'}`}>
+                       <div className="p-4 flex items-center justify-between">
+                          <div className="flex flex-col gap-1">
+                             <div className="text-[9px] font-bold text-navy/30 uppercase tracking-wider mb-1">Split With</div>
+                             <div className="flex -space-x-2">
+                                {exp.splitWith.map(uid => {
+                                  const m = members.find(mem => mem.id === uid);
+                                  return <img key={uid} src={m?.avatar} className="w-6 h-6 rounded-full border-2 border-white" title={m?.name} />;
+                                })}
+                             </div>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); setEditingExpense(exp); setIsModalOpen(true); }}
+                               className="p-2 bg-white text-stitch rounded-xl shadow-sm border border-stitch/20 hover:bg-stitch hover:text-white transition-colors flex items-center gap-1 text-[10px] font-black px-3"
+                             >
+                                <Edit2 size={12} /> EDIT
+                             </button>
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); setExpenses(expenses.filter(e => e.id !== exp.id)); }}
+                               className="p-2 bg-white text-red-400 rounded-xl shadow-sm border border-red-100 hover:bg-red-400 hover:text-white transition-colors flex items-center gap-1 text-[10px] font-black px-3"
+                             >
+                                <Trash2 size={12} /> DELETE
+                             </button>
+                          </div>
+                       </div>
+                       <div className="px-4 pb-3 text-[9px] font-bold text-navy/30 text-center uppercase tracking-wider">
+                          {exp.date} • Rate used: 1 {exp.currency} ≈ {convert(1, exp.currency, displayCurrency).toFixed(2)} {displayCurrency}
+                       </div>
+                    </div>
+                 </div>
+               );
+             })}
+           </div>
+         ) : (
+            <div className="py-24 text-center opacity-20 border-2 border-dashed border-accent rounded-3xl bg-paper/50">
+               <Wallet size={48} className="mx-auto mb-3" />
+               <p className="font-black uppercase text-[10px] tracking-widest">No expenses yet</p>
+            </div>
+         )}
+      </div>
+
+      {/* --- CURRENCY SETTINGS DRAWER (Bottom Sheet) --- */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}>
+           <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-10 sticker-shadow animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+              <div className="w-12 h-1 bg-accent rounded-full mx-auto mb-6 opacity-50" />
+              
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-black text-navy uppercase tracking-widest">幣別與匯率設定</h3>
-                <button onClick={() => setIsCurrencySettingsOpen(false)} className="p-2 bg-cream rounded-full text-navy/20"><X size={20} /></button>
+                 <h3 className="text-lg font-black text-navy uppercase tracking-widest">Currency & Rates</h3>
+                 <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
               </div>
-              <div className="space-y-6">
-                 <div>
-                    <label className="text-[10px] font-black uppercase text-navy/20 mb-3 block px-1 tracking-widest">顯示貨幣</label>
-                    <div className="flex gap-2">
-                       {(['JPY', 'HKD', 'AUD'] as const).map(cur => (
-                         <button key={cur} onClick={() => setBaseCurrency(cur)} className={`flex-1 py-3 rounded-xl border-2 font-black text-xs transition-all ${baseCurrency === cur ? 'bg-navy text-white border-navy sticker-shadow scale-105' : 'bg-white text-navy/20 border-accent/50'}`}>
-                           {cur}
-                         </button>
-                       ))}
-                    </div>
-                 </div>
-                 <div className="space-y-3">
-                    <div className="flex justify-between items-center px-1">
-                       <label className="text-[10px] font-black uppercase text-navy/20 tracking-widest">自訂匯率 (vs JPY)</label>
-                       <button onClick={fetchLiveRates} className="text-[9px] font-black text-stitch flex items-center gap-1 active:scale-90">
-                         <RefreshCw size={10} className={loadingRates ? 'animate-spin' : ''} /> 更新
+
+              {/* Display Currency Selection */}
+              <div className="mb-6">
+                 <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Display Currency</label>
+                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {activeCurrencies.map(cur => (
+                       <button 
+                         key={cur}
+                         onClick={() => setDisplayCurrency(cur)}
+                         className={`flex-shrink-0 px-4 py-2 rounded-xl border-2 font-black text-xs transition-all ${displayCurrency === cur ? 'bg-navy border-navy text-white shadow-md' : 'bg-white border-accent text-navy/40'}`}
+                       >
+                         {cur}
                        </button>
-                    </div>
-                    {['HKD', 'AUD'].map(cur => (
-                      <div key={cur} className="flex items-center justify-between p-4 bg-cream/40 rounded-xl border border-accent/40">
-                         <span className="font-black text-navy/40 text-xs uppercase">1 {cur} =</span>
-                         <div className="flex items-center gap-2">
-                            <input type="number" value={rates[cur as keyof typeof rates]} onChange={e => setRates({...rates, [cur]: parseFloat(e.target.value) || 0})} className="w-16 text-right font-black text-stitch bg-transparent border-none focus:ring-0 p-0" />
-                            <span className="text-[10px] font-black text-navy/10 uppercase">JPY</span>
-                         </div>
-                      </div>
                     ))}
-                    {rateSources.length > 0 && (
-                      <div className="mt-2 flex flex-col gap-1 px-1">
-                        <span className="text-[8px] font-black text-navy/20 uppercase tracking-widest">數據來源:</span>
-                        {rateSources.slice(0, 1).map((source, idx) => (
-                          <a key={idx} href={source.uri} target="_blank" className="text-[9px] font-bold text-stitch flex items-center gap-1 hover:underline truncate"><ExternalLink size={8} /> {source.title}</a>
-                        ))}
-                      </div>
-                    )}
                  </div>
               </div>
-              <button onClick={() => setIsCurrencySettingsOpen(false)} className="w-full mt-8 py-4 bg-navy text-white font-black rounded-xl-sticker uppercase text-[11px] tracking-widest">完成設定</button>
+
+              {/* Active Currencies Toggle */}
+              <div className="mb-6">
+                 <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Active Currencies (My Wallet)</label>
+                 <div className="flex flex-wrap gap-2">
+                    {AVAILABLE_CURRENCIES.map(cur => {
+                       const isActive = activeCurrencies.includes(cur);
+                       return (
+                          <button 
+                             key={cur}
+                             onClick={() => setActiveCurrencies(prev => isActive ? prev.filter(c => c !== cur) : [...prev, cur])}
+                             className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${isActive ? 'bg-stitch/10 border-stitch text-stitch' : 'bg-cream border-transparent text-navy/20'}`}
+                          >
+                             {cur}
+                          </button>
+                       );
+                    })}
+                 </div>
+              </div>
+              
+              {/* Rate Sync Button */}
+              <button 
+                 onClick={fetchRates}
+                 disabled={loadingRates}
+                 className="w-full py-4 bg-navy text-white font-black rounded-2xl-sticker uppercase text-xs tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                 <RefreshCw size={16} className={loadingRates ? 'animate-spin' : ''} />
+                 {loadingRates ? 'Syncing with Gemini...' : 'Update Rates with AI'}
+              </button>
+              
+              <p className="text-[9px] text-navy/20 text-center mt-3 font-bold">
+                 Using Gemini 1.5 Flash • Base: JPY
+              </p>
            </div>
         </div>
       )}
 
+      {/* --- ADD/EDIT EXPENSE MODAL --- */}
       {isModalOpen && (
         <ExpenseModal 
-          expense={editingExpense} members={members} rates={rates}
+          expense={editingExpense} 
+          members={members} 
+          currencies={activeCurrencies}
           onClose={() => setIsModalOpen(false)} 
           onSave={(e) => {
             if (editingExpense) setExpenses(expenses.map(ex => ex.id === e.id ? e : ex));
@@ -340,98 +440,228 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
           }} 
         />
       )}
+
+      {/* --- SETTLEMENT MODAL --- */}
+      {isSettlementOpen && (
+         <SettlementModal 
+            balances={balances} 
+            displayCurrency={displayCurrency} 
+            convert={convert} 
+            members={members}
+            onClose={() => setIsSettlementOpen(false)} 
+         />
+      )}
     </div>
   );
 };
 
-const CalculatorTool: React.FC<{ rates: Record<string, number>; onClose: () => void }> = ({ rates, onClose }) => {
-  const [val, setVal] = useState('');
-  const [cur, setCur] = useState<'HKD' | 'AUD'>('HKD');
-  return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-paper w-full max-w-xs rounded-3xl-sticker p-6 sticker-shadow border-4 border-donald/30 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-black text-navy uppercase tracking-widest leading-none">匯率換算器</h3>
-          <button onClick={onClose} className="p-2 bg-cream rounded-full text-navy/20 active:scale-90"><X size={20} /></button>
+// --- Sub-Components ---
+
+const SettlementModal: React.FC<{ 
+   balances: Record<string, number>, 
+   displayCurrency: string, 
+   convert: any, 
+   members: TripMember[], 
+   onClose: () => void 
+}> = ({ balances, displayCurrency, convert, members, onClose }) => {
+   
+   const suggestions = useMemo(() => {
+      const people = Object.entries(balances).map(([id, amount]) => ({ id, amount }));
+      const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount); // Less than -1 JPY to ignore dust
+      const creditors = people.filter(p => p.amount > 1).sort((a, b) => b.amount - a.amount);
+      
+      const transactions = [];
+      let i = 0, j = 0;
+      
+      while (i < debtors.length && j < creditors.length) {
+         const debtor = debtors[i];
+         const creditor = creditors[j];
+         
+         const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
+         transactions.push({ from: debtor.id, to: creditor.id, amount });
+         
+         debtor.amount += amount;
+         creditor.amount -= amount;
+         
+         if (Math.abs(debtor.amount) < 1) i++;
+         if (creditor.amount < 1) j++;
+      }
+      return transactions;
+   }, [balances]);
+
+   return (
+     <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={onClose}>
+        <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/30 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+           <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-black text-navy uppercase tracking-widest">Settlement Plan</h3>
+              <button onClick={onClose} className="p-2 bg-cream rounded-full text-navy/20"><X size={20} /></button>
+           </div>
+           
+           <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+              {suggestions.length > 0 ? suggestions.map((tx, idx) => {
+                 const from = members.find(m => m.id === tx.from);
+                 const to = members.find(m => m.id === tx.to);
+                 const amountDisplay = Math.round(convert(tx.amount, 'JPY', displayCurrency));
+                 
+                 return (
+                    <div key={idx} className="bg-white p-4 rounded-2xl border border-accent flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                          <img src={from?.avatar} className="w-8 h-8 rounded-full border border-red-200" />
+                          <div className="flex flex-col items-center px-2">
+                             <p className="text-[9px] font-black text-navy/30 uppercase">PAYS</p>
+                             <ArrowRight size={12} className="text-navy/20 my-1" />
+                          </div>
+                          <img src={to?.avatar} className="w-8 h-8 rounded-full border border-stitch" />
+                       </div>
+                       <div className="text-right">
+                          <p className="font-black text-navy text-lg">{displayCurrency} {amountDisplay.toLocaleString()}</p>
+                       </div>
+                    </div>
+                 );
+              }) : (
+                 <div className="py-12 text-center text-navy/30 font-black uppercase tracking-widest">
+                    All settled up!
+                 </div>
+              )}
+           </div>
         </div>
-        <div className="space-y-6">
-          <div className="flex bg-accent/10 p-1.5 rounded-2xl border border-accent/20">
-            {(['HKD', 'AUD'] as const).map(c => (
-              <button key={c} onClick={() => setCur(c)} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all ${cur === c ? 'bg-white text-navy shadow-sm scale-105' : 'text-navy/20'}`}>{c}</button>
-            ))}
-          </div>
-          <input autoFocus type="number" value={val} onChange={e => setVal(e.target.value)} placeholder="0.00" className="w-full text-4xl font-black text-navy border-b-4 border-accent/20 bg-transparent p-4 focus:ring-0 text-center" />
-          <div className="text-center py-6 bg-stitch/5 rounded-3xl border border-stitch/10">
-            <p className="text-[9px] font-black uppercase text-navy/20 mb-2">大約等於</p>
-            <h4 className="text-4xl font-black text-stitch">¥ {val ? Math.round(parseFloat(val) * rates[cur]).toLocaleString() : '0'}</h4>
-          </div>
-        </div>
-        <button onClick={onClose} className="w-full mt-6 py-4 bg-navy text-white font-black rounded-xl-sticker uppercase text-[11px] tracking-widest">關閉</button>
-      </div>
-    </div>
-  );
+     </div>
+   );
 };
 
-const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[]; rates: Record<string, number>; onClose: () => void; onSave: (e: ExpenseType) => void }> = ({ expense, members, rates, onClose, onSave }) => {
+const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[]; currencies: string[]; onClose: () => void; onSave: (e: ExpenseType) => void }> = ({ expense, members, currencies, onClose, onSave }) => {
   const [formData, setFormData] = useState<Partial<ExpenseType>>(expense || {
-    amount: 0, currency: 'JPY', category: '', paidBy: members[0].id, splitWith: members.map(m => m.id), date: new Date().toISOString().split('T')[0]
-  });
+    amount: '',
+    currency: currencies[0],
+    category: '',
+    title: '', // New Title field
+    paidBy: members[0].id,
+    splitWith: members.map(m => m.id),
+    date: new Date().toISOString().split('T')[0]
+  } as any);
+
+  const categories = ['Food', 'Restaurant', 'Transport', 'Shopping', 'Stay', 'Ticket', 'Attraction', 'Other'];
+
   return (
     <div className="fixed inset-0 z-[150] flex flex-col bg-cream/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300">
       <div className="p-4 flex justify-between items-center border-b border-accent/40 bg-white/80">
         <button onClick={onClose} className="text-navy/20 p-2"><X size={24} /></button>
-        <h3 className="text-lg font-black text-navy uppercase tracking-[0.2em] leading-none">{expense ? '編輯支出' : '新增支出'}</h3>
-        <button onClick={() => onSave(formData as ExpenseType)} className="text-stitch font-black p-2 disabled:opacity-30" disabled={!formData.category || !formData.amount || formData.splitWith?.length === 0}>儲存</button>
+        <h3 className="text-lg font-black text-navy uppercase tracking-[0.2em]">{expense ? 'Edit Expense' : 'New Expense'}</h3>
+        <button 
+           onClick={() => onSave({ ...formData, title: formData.title || formData.category } as ExpenseType)} 
+           className="text-stitch font-black p-2 disabled:opacity-30" 
+           disabled={!formData.category || !formData.amount || formData.splitWith?.length === 0}
+        >
+           SAVE
+        </button>
       </div>
+
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
-        <div className="bg-white p-8 rounded-3xl-sticker sticker-shadow border border-accent/30 text-center shadow-inner">
-          <div className="flex items-center justify-center gap-2">
-            <select value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value as any})} className="text-xl font-black text-stitch bg-transparent border-none focus:ring-0 p-0 w-min cursor-pointer">
-              <option value="JPY">¥ JPY</option><option value="HKD">$ HKD</option><option value="AUD">$ AUD</option>
-            </select>
-            <input type="number" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: parseFloat(e.target.value) || 0})} placeholder="0" className="w-full text-5xl font-black text-navy bg-transparent border-none focus:ring-0 text-center" autoFocus />
-          </div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow space-y-6 shadow-inner">
-          <div className="flex items-center gap-4 border-b border-accent/10 pb-4">
-             <div className="p-2 bg-cream rounded-lg text-navy/20"><Search size={18} /></div>
-             <input type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="這筆錢花在哪？(如：拉麵)" className="w-full font-black text-navy border-none focus:ring-0 p-0 text-lg" />
-          </div>
-          <div className="flex items-center gap-4">
-             <div className="p-2 bg-cream rounded-lg text-navy/20"><Calendar size={18} /></div>
-             <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full font-black text-navy bg-transparent border-none focus:ring-0 p-0 text-sm" />
-          </div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
-          <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">付款人</label>
-          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-            {members.map(m => (
-              <button key={m.id} onClick={() => setFormData({ ...formData, paidBy: m.id })} className={`flex-shrink-0 flex flex-col items-center gap-2 transition-all ${formData.paidBy === m.id ? 'opacity-100 scale-110' : 'opacity-20'}`}>
-                <img src={m.avatar} className={`w-14 h-14 rounded-full object-cover border-4 p-0.5 transition-all ${formData.paidBy === m.id ? 'border-stitch shadow-md' : 'border-transparent'}`} />
-                <span className="text-[9px] font-black uppercase">{m.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
-          <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">與誰分帳</label>
-          <div className="grid grid-cols-2 gap-3">
-            {members.map(m => {
-              const isSelected = formData.splitWith?.includes(m.id);
-              return (
-                <button key={m.id} onClick={() => {
-                  const current = formData.splitWith || [];
-                  setFormData({ ...formData, splitWith: isSelected ? current.filter(id => id !== m.id) : [...current, m.id] });
-                }} className={`flex items-center gap-3 p-4 rounded-xl-sticker border-2 transition-all ${isSelected ? 'bg-stitch/5 border-stitch text-navy' : 'bg-white border-accent/40 text-navy/10'}`}>
-                  <div className={`w-5 h-5 rounded-lg border-2 flex items-center justify-center ${isSelected ? 'bg-stitch border-stitch' : 'border-navy/10'}`}>
-                    {isSelected && <Check size={14} className="text-white" strokeWidth={4} />}
-                  </div>
-                  <span className="text-[11px] font-black uppercase tracking-widest">{m.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+         {/* Amount Input */}
+         <div className="bg-white p-8 rounded-3xl-sticker sticker-shadow border border-accent/30 text-center shadow-inner">
+            <div className="flex items-center justify-center gap-2">
+               <div className="relative">
+                  <select 
+                     value={formData.currency} 
+                     onChange={e => setFormData({...formData, currency: e.target.value})} 
+                     className="appearance-none bg-transparent text-xl font-black text-stitch border-none focus:ring-0 pr-6 cursor-pointer"
+                  >
+                     {currencies.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-stitch pointer-events-none" />
+               </div>
+               <input 
+                  type="number" 
+                  value={formData.amount || ''} 
+                  onChange={e => setFormData({...formData, amount: parseFloat(e.target.value) || 0})} 
+                  placeholder="0" 
+                  className="w-full text-5xl font-black text-navy bg-transparent border-none focus:ring-0 text-center placeholder:text-navy/10" 
+                  autoFocus 
+               />
+            </div>
+         </div>
+
+         {/* Title (Name) & Date Input */}
+         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner space-y-4">
+            <div>
+               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1">
+                  <Tag size={12} /> Name / Title
+               </label>
+               <input 
+                 type="text" 
+                 value={formData.title} 
+                 onChange={e => setFormData({...formData, title: e.target.value})} 
+                 placeholder="e.g. Ichiran Ramen" 
+                 className="w-full font-black text-navy border-none focus:ring-0 p-0 text-xl placeholder:text-navy/10" 
+               />
+            </div>
+            
+            <div className="pt-4 border-t border-accent/10">
+               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1">
+                  <Calendar size={12} /> Date
+               </label>
+               <input 
+                 type="date" 
+                 value={formData.date} 
+                 onChange={e => setFormData({...formData, date: e.target.value})} 
+                 className="w-full font-bold text-navy bg-transparent border-none focus:ring-0 p-0 text-sm" 
+               />
+            </div>
+         </div>
+
+         {/* Category Chips */}
+         <div>
+            <label className="text-[10px] font-black uppercase text-navy/20 mb-3 block px-1 tracking-widest">Category (Icon)</label>
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+               {categories.map(cat => (
+                  <button 
+                     key={cat}
+                     onClick={() => setFormData({...formData, category: cat})}
+                     className={`px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider border-2 transition-all ${formData.category === cat ? 'bg-navy border-navy text-white shadow-md' : 'bg-white border-accent text-navy/30'}`}
+                  >
+                     {cat}
+                  </button>
+               ))}
+            </div>
+         </div>
+
+         {/* Payer */}
+         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
+            <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">Paid By</label>
+            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+               {members.map(m => (
+                  <button key={m.id} onClick={() => setFormData({ ...formData, paidBy: m.id })} className={`flex-shrink-0 flex flex-col items-center gap-2 transition-all ${formData.paidBy === m.id ? 'opacity-100 scale-110' : 'opacity-40 grayscale'}`}>
+                     <img src={m.avatar} className={`w-12 h-12 rounded-full object-cover border-2 ${formData.paidBy === m.id ? 'border-stitch shadow-md' : 'border-transparent'}`} />
+                     <span className="text-[9px] font-black uppercase">{m.name}</span>
+                  </button>
+               ))}
+            </div>
+         </div>
+
+         {/* Split With */}
+         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
+            <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">Split With</label>
+            <div className="grid grid-cols-2 gap-3">
+               {members.map(m => {
+                  const isSelected = formData.splitWith?.includes(m.id);
+                  return (
+                     <button 
+                        key={m.id} 
+                        onClick={() => {
+                           const current = formData.splitWith || [];
+                           setFormData({ ...formData, splitWith: isSelected ? current.filter(id => id !== m.id) : [...current, m.id] });
+                        }} 
+                        className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${isSelected ? 'bg-stitch/10 border-stitch text-navy' : 'bg-white border-accent/40 text-navy/20'}`}
+                     >
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-stitch border-stitch' : 'border-accent'}`}>
+                           {isSelected && <Check size={14} className="text-white" />}
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-widest">{m.name}</span>
+                     </button>
+                  );
+               })}
+            </div>
+         </div>
       </div>
     </div>
   );

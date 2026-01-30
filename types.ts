@@ -1,5 +1,5 @@
 
-export type Category = 'Attraction' | 'Food' | 'Transport' | 'Stay' | 'Other';
+export type Category = 'Attraction' | 'Restaurant' | 'Transport' | 'Stay' | 'Shopping' | 'Other';
 
 export interface TripMember {
   id: string;
@@ -11,6 +11,7 @@ export interface ScheduleItem {
   id: string;
   dayIndex: number;
   time: string;
+  endTime?: string; // Optional end time for duration calculation
   title: string;
   location: string;
   category: Category;
@@ -34,9 +35,10 @@ export interface Booking {
 export interface Expense {
   id: string;
   amount: number;
-  currency: 'JPY' | 'HKD' | 'AUD';
-  category: string;
-  paidBy: string; // Member ID
+  currency: string; // Dynamic currency
+  category: string; // Used for icon/color logic (Food, Transport, etc.)
+  title: string;    // Custom name of the expense (e.g. "7-11 Snacks")
+  paidBy: string;   // Member ID
   splitWith: string[]; // Array of Member IDs
   date: string;
 }

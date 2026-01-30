@@ -17,7 +17,11 @@ import {
   Ticket as TicketIcon,
   Download,
   Upload,
-  FileJson
+  FileJson,
+  Edit2,
+  Clock,
+  ShoppingBag,
+  Utensils
 } from 'lucide-react';
 import { TripConfig, ScheduleItem, Category, TripMember, Booking } from '../types';
 import { COLORS } from '../constants';
@@ -49,8 +53,8 @@ const Schedule: React.FC<ScheduleProps> = ({
   const [itinerary, setItinerary] = useState<ScheduleItem[]>(() => {
     const saved = localStorage.getItem('itinerary');
     return saved ? JSON.parse(saved) : [
-      { id: '1', dayIndex: 0, time: '10:00', title: 'Arrival', location: 'NRT Terminal 1', category: 'Transport' as Category },
-      { id: '2', dayIndex: 0, time: '13:30', title: 'Lunch', location: 'Ichiran Shinjuku', category: 'Food' as Category },
+      { id: '1', dayIndex: 0, time: '10:00', endTime: '11:30', title: 'Arrival', location: 'NRT Terminal 1', category: 'Transport' as Category },
+      { id: '2', dayIndex: 0, time: '13:30', endTime: '14:30', title: 'Lunch', location: 'Ichiran Shinjuku', category: 'Restaurant' as Category },
     ];
   });
 
@@ -94,7 +98,7 @@ const Schedule: React.FC<ScheduleProps> = ({
     if (savedBookings) {
       setBookings(JSON.parse(savedBookings));
     }
-  }, [isAddModalOpen, selectedDay]); // Refresh when modals close or day changes just in case
+  }, [isAddModalOpen, selectedDay]);
 
   const countdown = useMemo(() => {
     const start = new Date(config.startDate).getTime();
@@ -118,6 +122,18 @@ const Schedule: React.FC<ScheduleProps> = ({
   const currentDayItems = useMemo(() => 
     itinerary.filter(item => item.dayIndex === selectedDay).sort((a, b) => a.time.localeCompare(b.time)),
   [itinerary, selectedDay]);
+
+  // Calculations for Duration
+  const getDurationString = (start: string, end?: string) => {
+    if (!end || end === '--:--') return '';
+    const [h1, m1] = start.split(':').map(Number);
+    const [h2, m2] = end.split(':').map(Number);
+    let diffMins = (h2 * 60 + m2) - (h1 * 60 + m1);
+    if (diffMins < 0) diffMins += 24 * 60; // Handle over midnight simple case
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return `${hours > 0 ? `${hours}h ` : ''}${mins > 0 ? `${mins}m` : ''}`.trim();
+  };
 
   // Drag & Drop
   const handleDragStart = (e: React.DragEvent, item: ScheduleItem, source: 'pool' | 'schedule') => {
@@ -189,7 +205,8 @@ const Schedule: React.FC<ScheduleProps> = ({
     setIsAddModalOpen(true);
   };
 
-  const openEditModal = (item: ScheduleItem, target: 'pool' | 'schedule') => {
+  const openEditModal = (e: React.MouseEvent, item: ScheduleItem, target: 'pool' | 'schedule') => {
+    e.stopPropagation();
     setAddItemTarget(target);
     setModalMode('edit');
     setEditingItem(item);
@@ -197,8 +214,12 @@ const Schedule: React.FC<ScheduleProps> = ({
     setSwipeId(null);
   };
 
+  const handlePoolItemClick = (item: ScheduleItem) => {
+    // Direct click on Pool Item opens the "Move To Day" modal
+    setMovingItem(item);
+  };
+
   const handleSaveItem = (itemData: any) => {
-    // Check if dayIndex changed during edit (for schedule items)
     const targetDayIndex = itemData.dayIndex !== undefined ? itemData.dayIndex : (addItemTarget === 'schedule' ? selectedDay : -1);
 
     if (modalMode === 'add') {
@@ -212,19 +233,15 @@ const Schedule: React.FC<ScheduleProps> = ({
     } else if (editingItem) {
       const updatedItem = { ...editingItem, ...itemData, dayIndex: targetDayIndex };
       
-      // Handle moving between pool and schedule or changing days
       const oldDayIndex = editingItem.dayIndex;
       
       if (oldDayIndex !== targetDayIndex) {
-         // Remove from old location
          if (oldDayIndex === -1) setPool(prev => prev.filter(i => i.id !== editingItem.id));
          else setItinerary(prev => prev.filter(i => i.id !== editingItem.id));
          
-         // Add to new location
          if (targetDayIndex === -1) setPool(prev => [...prev, updatedItem]);
          else setItinerary(prev => [...prev, updatedItem]);
       } else {
-         // Just update in place
          if (targetDayIndex === -1) setPool(pool.map(i => i.id === updatedItem.id ? updatedItem : i));
          else setItinerary(itinerary.map(i => i.id === updatedItem.id ? updatedItem : i));
       }
@@ -272,7 +289,6 @@ const Schedule: React.FC<ScheduleProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  // Import Data Logic
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -284,7 +300,6 @@ const Schedule: React.FC<ScheduleProps> = ({
           const rawResult = event.target?.result as string;
           const data = JSON.parse(rawResult);
 
-          // Restore Keys if they exist
           if (data.tripConfig) localStorage.setItem('tripConfig', data.tripConfig);
           if (data.itinerary) localStorage.setItem('itinerary', data.itinerary);
           if (data.inspiration_pool) localStorage.setItem('inspiration_pool', data.inspiration_pool);
@@ -305,7 +320,6 @@ const Schedule: React.FC<ScheduleProps> = ({
       reader.readAsText(file);
     }
     
-    // Reset Input
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -341,7 +355,7 @@ const Schedule: React.FC<ScheduleProps> = ({
         </div>
         
         <div className={`
-           min-h-[100px] p-4 rounded-2xl-sticker border-2 border-dashed flex gap-3 overflow-x-auto snap-x scrollbar-hide items-center
+           min-h-[110px] p-4 rounded-2xl-sticker border-2 border-dashed flex gap-3 overflow-x-auto snap-x scrollbar-hide items-center
            ${isPoolDragOver ? 'bg-stitch/10 border-stitch' : 'bg-white border-accent'}
         `}>
           {pool.length > 0 ? pool.map((item) => (
@@ -350,29 +364,28 @@ const Schedule: React.FC<ScheduleProps> = ({
               draggable
               onDragStart={(e) => handleDragStart(e, item, 'pool')}
               onDragEnd={handleDragEnd}
-              onClick={() => openEditModal(item, 'pool')}
-              className="flex-shrink-0 w-40 snap-center cursor-pointer active:cursor-grabbing group"
+              onClick={() => handlePoolItemClick(item)} // Single click -> Move to Day Modal
+              className="flex-shrink-0 w-44 snap-center cursor-pointer active:cursor-grabbing group"
             >
               <div className="bg-paper p-3 rounded-xl-sticker sticker-shadow border border-accent relative hover:-translate-y-1 transition-transform duration-300 active:scale-105 active:shadow-xl h-full">
-                 <div className="flex justify-between items-start mb-2">
+                 <div className="flex justify-between items-start mb-2 relative z-10">
                     <span 
                       className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider text-white"
                       style={{ backgroundColor: COLORS[item.category.toLowerCase() as keyof typeof COLORS] || COLORS.stitch }}
                     >
                       {item.category}
                     </span>
-                    <button onClick={(e) => {e.stopPropagation(); deleteItem(item.id, 'pool')}} className="text-navy/10 hover:text-red-400"><X size={12} /></button>
+                    <div className="flex items-center gap-1">
+                       <button onClick={(e) => openEditModal(e, item, 'pool')} className="text-navy/20 hover:text-stitch bg-cream p-1 rounded-full"><Edit2 size={10} /></button>
+                       <button onClick={(e) => {e.stopPropagation(); deleteItem(item.id, 'pool')}} className="text-navy/20 hover:text-red-400 bg-cream p-1 rounded-full"><X size={10} /></button>
+                    </div>
                  </div>
                  <h4 className="font-black text-navy text-sm leading-tight mb-1 truncate">{item.location}</h4>
                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-accent/30">
-                    <p className="text-[9px] font-bold text-navy/30 truncate flex-1">{item.notes || 'No notes'}</p>
-                    {/* Move Button for Pool items */}
-                    <button 
-                       onClick={(e) => { e.stopPropagation(); setMovingItem(item); }}
-                       className="p-1 text-stitch hover:bg-stitch/10 rounded-full"
-                    >
+                    <p className="text-[9px] font-bold text-navy/30 truncate flex-1">{item.notes || 'Tap to assign day'}</p>
+                    <div className="p-1 bg-stitch/10 text-stitch rounded-full animate-pulse">
                        <ArrowRight size={12} />
-                    </button>
+                    </div>
                  </div>
               </div>
             </div>
@@ -412,8 +425,8 @@ const Schedule: React.FC<ScheduleProps> = ({
         onDrop={(e) => { if (e.target === e.currentTarget) handleDropOnScheduleList(-1); }}
       >
         {currentDayItems.length > 0 ? currentDayItems.map((item, idx) => {
-          // Check for linked bookings
           const linkedBooking = bookings.find(b => b.linkedScheduleId === item.id);
+          const durationStr = getDurationString(item.time, item.endTime);
 
           return (
             <div 
@@ -427,9 +440,9 @@ const Schedule: React.FC<ScheduleProps> = ({
                 draggable
                 onDragStart={(e) => handleDragStart(e, item, 'schedule')}
                 onDragEnd={handleDragEnd}
-                onClick={() => openEditModal(item, 'schedule')}
+                onClick={(e) => openEditModal(e, item, 'schedule')}
               >
-                <div className="mt-6 text-navy/10 cursor-grab active:cursor-grabbing group-hover:text-navy/30 transition-colors hidden md:block">
+                <div className="mt-8 text-navy/10 cursor-grab active:cursor-grabbing group-hover:text-navy/30 transition-colors hidden md:block">
                   <GripVertical size={20} />
                 </div>
 
@@ -443,18 +456,22 @@ const Schedule: React.FC<ScheduleProps> = ({
 
                   {/* Card Content */}
                   <div className={`bg-paper p-5 rounded-xl-sticker sticker-shadow border border-accent transition-all duration-300 active:scale-[1.02] hover:border-stitch/50 ${swipeId === item.id ? 'translate-x-32' : 'translate-x-0'}`}>
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex justify-between items-start mb-2">
                       <div className="flex items-center gap-3">
-                        <div className="text-2xl font-black text-navy tracking-tight">{item.time}</div>
                         <span 
-                          className="px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-wider text-white shadow-sm" 
+                          className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider text-white shadow-sm" 
                           style={{ backgroundColor: COLORS[item.category.toLowerCase() as keyof typeof COLORS] || COLORS.stitch }}
                         >
                           {item.category}
                         </span>
+                        {durationStr && (
+                          <div className="flex items-center gap-1 text-[9px] font-bold text-navy/40 bg-accent/20 px-2 py-1 rounded-full">
+                            <Clock size={10} />
+                            {durationStr}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
-                         {/* Move Button for Mobile */}
                          <button 
                            onClick={(e) => { e.stopPropagation(); setMovingItem(item); }}
                            className="p-2 bg-cream text-navy/30 rounded-full hover:bg-stitch hover:text-white transition-colors"
@@ -470,35 +487,40 @@ const Schedule: React.FC<ScheduleProps> = ({
                       </div>
                     </div>
                     
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <MapPin size={16} className="text-stitch flex-shrink-0" />
-                          <h3 className="text-xl font-black text-navy leading-tight truncate">{item.location}</h3>
-                        </div>
-                        {/* Action Buttons Row */}
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {/* Navigate Button */}
+                    <div className="flex flex-col gap-1 mb-3">
+                       <h3 className="text-2xl font-black text-navy leading-none tracking-tight">{item.title || item.location}</h3>
+                       <div className="flex items-center gap-1.5 text-navy/50">
+                          <MapPin size={12} className="text-stitch" />
+                          <span className="text-xs font-bold truncate">{item.location}</span>
+                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-accent/30 pt-3 mt-1">
+                       <div className="text-xl font-black text-navy tabular-nums">
+                          {item.time} 
+                          {item.endTime && <span className="text-navy/30 text-base font-bold ml-1">- {item.endTime}</span>}
+                       </div>
+
+                       <div className="flex gap-2">
                           <button 
                             onClick={(e) => handleOpenMaps(e, item.location)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-cream rounded-full border border-accent text-[10px] font-black text-navy/60 hover:bg-green-100 hover:text-green-700 hover:border-green-200 transition-all active:scale-95"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-cream rounded-full border border-accent text-[10px] font-black text-navy/60 hover:bg-green-100 hover:text-green-700 transition-all active:scale-95"
                           >
                             <Navigation size={10} /> GO
                           </button>
                           
-                          {/* Linked Ticket Button */}
                           {linkedBooking && (
                             <button 
                               onClick={(e) => { e.stopPropagation(); onNavigate('bookings', linkedBooking.id); }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-donald/20 rounded-full border border-donald/50 text-[10px] font-black text-navy/70 hover:bg-donald hover:text-navy transition-all active:scale-95"
+                              className="flex items-center gap-1 px-3 py-1.5 bg-donald/20 rounded-full border border-donald/50 text-[10px] font-black text-navy/70 hover:bg-donald hover:text-navy transition-all active:scale-95"
                             >
                               <TicketIcon size={10} /> TICKET
                             </button>
                           )}
-                        </div>
-                      </div>
+                       </div>
                     </div>
-                    {item.notes && <div className="mt-4 pt-4 border-t border-accent/50 text-[10px] text-navy/70 italic leading-relaxed whitespace-pre-wrap">{item.notes}</div>}
+                    
+                    {item.notes && <div className="mt-3 text-[10px] text-navy/60 bg-cream/50 p-2 rounded-lg italic leading-relaxed whitespace-pre-wrap">{item.notes}</div>}
                   </div>
                 </div>
               </div>
@@ -657,14 +679,16 @@ const AddItemModal: React.FC<{
   const [formData, setFormData] = useState({
     dayIndex: initialData?.dayIndex !== undefined ? initialData.dayIndex : (target === 'pool' ? -1 : 0),
     time: initialData?.time || '10:00', 
-    title: initialData?.title || 'Activity', 
+    endTime: initialData?.endTime || '',
+    title: initialData?.title || '', 
     location: initialData?.location || '', 
     category: initialData?.category || 'Attraction', 
     notes: initialData?.notes || '',
   });
-  const [showDetails, setShowDetails] = useState(target === 'schedule'); // Auto-show details for Schedule
+  
+  const [showDetails, setShowDetails] = useState(target === 'schedule' || mode === 'edit'); 
 
-  const categories: Category[] = ['Attraction', 'Food', 'Transport', 'Stay', 'Other'];
+  const categories: Category[] = ['Attraction', 'Restaurant', 'Transport', 'Stay', 'Shopping', 'Other'];
 
   const daysOptions = Array.from({ length: duration }, (_, i) => {
     const d = new Date(startDate);
@@ -700,6 +724,16 @@ const AddItemModal: React.FC<{
               className="w-full text-2xl font-black bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" 
             />
           </div>
+          <div className="mt-4 pt-4 border-t border-accent/20">
+             <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Title (Optional)</label>
+             <input 
+               type="text" 
+               value={formData.title} 
+               onChange={e => setFormData({...formData, title: e.target.value})} 
+               placeholder="Activity Name (e.g. Shopping Spree)" 
+               className="w-full text-lg font-bold bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" 
+             />
+          </div>
         </div>
 
         {/* Categories Chips */}
@@ -724,7 +758,8 @@ const AddItemModal: React.FC<{
 
         {/* Collapsible Details including Day Selector */}
         <div className="space-y-4">
-           {target === 'pool' && !showDetails && (
+           {/* If details hidden (adding new pool item), show expand button */}
+           {!showDetails && (
               <button 
                 onClick={() => setShowDetails(true)}
                 className="w-full py-3 text-xs font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-stitch/5 rounded-xl transition-colors"
@@ -751,8 +786,18 @@ const AddItemModal: React.FC<{
                </div>
 
                <div className="bg-white p-4 rounded-2xl border border-accent">
-                   <label className="text-[10px] font-black uppercase text-navy/30 mb-1 block">Time</label>
-                   <input type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full font-black text-lg bg-transparent border-none p-0 focus:ring-0" />
+                   <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Time & Duration</label>
+                   <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                         <span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">Start</span>
+                         <input type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0" />
+                      </div>
+                      <ArrowRight size={16} className="text-navy/10 mt-4" />
+                      <div className="flex-1">
+                         <span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">End (Optional)</span>
+                         <input type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0 text-navy/60" />
+                      </div>
+                   </div>
                </div>
 
                <div className="bg-white p-4 rounded-2xl border border-accent">
