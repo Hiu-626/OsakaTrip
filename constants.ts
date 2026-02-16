@@ -1,5 +1,5 @@
 
-import { TripMember, ScheduleItem, TripConfig } from './types';
+import { TripMember, ScheduleItem, TripConfig } from './types.ts';
 
 export const COLORS = {
   stitch: '#6EC1E4',

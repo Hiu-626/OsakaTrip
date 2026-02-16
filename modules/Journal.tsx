@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { TripMember, JournalPost } from '../types';
+import { TripMember, JournalPost } from '../types.ts';
 import { 
   Share2, 
   MoreHorizontal, 

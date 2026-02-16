@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { TripMember, PlanningItem } from '../types';
+import { TripMember, PlanningItem } from '../types.ts';
 import { Plus, Trash2, Check, User, X, Users, Edit2 } from 'lucide-react';
 
 const Planning: React.FC<{ members: TripMember[] }> = ({ members }) => {
@@ -170,7 +170,7 @@ const Planning: React.FC<{ members: TripMember[] }> = ({ members }) => {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-navy/10 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}>
-          <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+          <div className="bg-paper w-full max-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-black text-navy uppercase tracking-widest">{modalMode === 'add' ? `Add ${activeTab}` : 'Edit Item'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
