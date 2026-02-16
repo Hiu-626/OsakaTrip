@@ -23,7 +23,6 @@ import {
   ChevronUp,
   ChevronDown,
   Download,
-  AlertTriangle,
   Link
 } from 'lucide-react';
 import { Booking, TripMember, ScheduleItem } from '../types.ts';
@@ -210,7 +209,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     const hasImage = !!booking.imageUrl;
     const linkedItem = itinerary.find(i => i.id === booking.linkedScheduleId);
     
-    const DetailField = ({ label, value, fullWidth = false }: { label: string, value: any, fullWidth?: boolean, key?: string }) => {
+    const DetailField = ({ label, value, fullWidth = false }: { label: string, value: any, fullWidth?: boolean }) => {
        if (!value || value === '') return null;
        return (
          <div className={`${fullWidth ? 'col-span-2' : ''}`}>
@@ -418,7 +417,7 @@ const BookingFormModal: React.FC<{ initialData: Booking | null; members: TripMem
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-20">
         <div className="w-full aspect-[21/9] bg-white rounded-2xl-sticker border-2 border-dashed border-accent flex flex-col items-center justify-center relative overflow-hidden cursor-pointer" onClick={() => document.getElementById('imageInput')?.click()}>
           {imagePreview ? (
-            <div className="relative w-full h-full"><img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />{isScanning && <div className="absolute inset-0 bg-navy/60 backdrop-blur-sm flex items-center justify-center text-white"><Wand2 className="animate-pulse" /></div>}</div>
+            <div className="relative w-full h-full"><img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); setImagePreview(''); }} className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full"><X size={14} /></button>{isScanning && <div className="absolute inset-0 bg-navy/60 backdrop-blur-sm flex items-center justify-center text-white"><Wand2 className="animate-pulse" /></div>}</div>
           ) : (
             <div className="flex flex-col items-center text-navy/20"><Camera size={40} /><p className="text-[10px] font-black uppercase">Snap Ticket</p></div>
           )}

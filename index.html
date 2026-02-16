@@ -21,17 +21,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
   
   <script>
-    // Polyfill process for browser environment
+    // 注入環境變數存根，確保與系統環境變數同步
     window.process = { 
       env: { 
         NODE_ENV: 'production',
-        API_KEY: 'AIzaSyA4nwqvMZEnZfpowZZcpGeurMmO6jMZ-J0',
-        VITE_FIREBASE_API_KEY: '',
-        VITE_FIREBASE_AUTH_DOMAIN: '',
-        VITE_FIREBASE_PROJECT_ID: '',
-        VITE_FIREBASE_STORAGE_BUCKET: '',
-        VITE_FIREBASE_MESSAGING_SENDER_ID: '',
-        VITE_FIREBASE_APP_ID: ''
+        API_KEY: window.process?.env?.API_KEY || ''
       } 
     };
     

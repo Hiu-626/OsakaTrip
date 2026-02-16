@@ -63,27 +63,46 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
 
   const todayDate = new Date().toISOString().split('T')[0];
   
-  // Fix: Explicitly type useMemo return to avoid 'unknown' inference for breakdownStats and resolve map() error.
-  const { todayStats, totalSpentDisplay, breakdownStats } = useMemo<{
-    todayStats: { count: number; total: number };
-    totalSpentDisplay: number;
-    breakdownStats: any[];
-  }>(() => {
+  // 明確定義 return type 以修復 TypeScript 的 unknown 推斷
+  const statsResult = useMemo(() => {
     const todayExpenses = expenses.filter(e => e.date === todayDate);
     const todayTotalJPY = todayExpenses.reduce((sum, e) => sum + (e.amount * (rates[e.currency] || 1)), 0);
     const totalJPY = expenses.reduce((sum, e) => sum + (e.amount * (rates[e.currency] || 1)), 0);
-    let stats: any[] = [];
+    
+    let stats: { name: string; value: number; percent: number }[] = [];
+    
     if (breakdownMode === 'category') {
       const catMap: Record<string, number> = {};
-      expenses.forEach(e => { const val = convert(e.amount, e.currency, displayCurrency); catMap[e.category] = (catMap[e.category] || 0) + val; });
-      stats = Object.entries(catMap).map(([name, value]) => ({ name, value, percent: totalJPY > 0 ? (value / convert(totalJPY, 'JPY', displayCurrency)) * 100 : 0 })).sort((a, b) => b.value - a.value);
+      expenses.forEach(e => { 
+        const val = convert(e.amount, e.currency, displayCurrency); 
+        catMap[e.category] = (catMap[e.category] || 0) + val; 
+      });
+      stats = Object.entries(catMap).map(([name, value]) => ({ 
+        name, 
+        value, 
+        percent: totalJPY > 0 ? (value / convert(totalJPY, 'JPY', displayCurrency)) * 100 : 0 
+      })).sort((a, b) => b.value - a.value);
     } else {
       const dateMap: Record<string, number> = {};
-      expenses.forEach(e => { const val = convert(e.amount, e.currency, displayCurrency); dateMap[e.date] = (dateMap[e.date] || 0) + val; });
-      stats = Object.entries(dateMap).map(([name, value]) => ({ name, value, percent: totalJPY > 0 ? (value / convert(totalJPY, 'JPY', displayCurrency)) * 100 : 0 })).sort((a, b) => b.name.localeCompare(a.name));
+      expenses.forEach(e => { 
+        const val = convert(e.amount, e.currency, displayCurrency); 
+        dateMap[e.date] = (dateMap[e.date] || 0) + val; 
+      });
+      stats = Object.entries(dateMap).map(([name, value]) => ({ 
+        name, 
+        value, 
+        percent: totalJPY > 0 ? (value / convert(totalJPY, 'JPY', displayCurrency)) * 100 : 0 
+      })).sort((a, b) => b.name.localeCompare(a.name));
     }
-    return { todayStats: { count: todayExpenses.length, total: convert(todayTotalJPY, 'JPY', displayCurrency) }, totalSpentDisplay: convert(totalJPY, 'JPY', displayCurrency), breakdownStats: stats };
+    
+    return { 
+      todayStats: { count: todayExpenses.length, total: convert(todayTotalJPY, 'JPY', displayCurrency) }, 
+      totalSpentDisplay: convert(totalJPY, 'JPY', displayCurrency), 
+      breakdownStats: stats 
+    };
   }, [expenses, rates, displayCurrency, breakdownMode, todayDate]);
+
+  const { todayStats, totalSpentDisplay, breakdownStats } = statsResult;
 
   const groupedExpenses = useMemo(() => {
     const filtered = expenses.filter(e => {
@@ -102,7 +121,13 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     expenses.forEach(exp => {
       const amountJPY = exp.amount * (rates[exp.currency] || 1);
       const shareJPY = amountJPY / (exp.splitWith.length || 1);
-      exp.splitWith.forEach(uid => { if (exp.settledBy?.includes(uid)) return; if (uid !== exp.paidBy) { if (bal[uid] !== undefined) bal[uid] -= shareJPY; if (bal[exp.paidBy] !== undefined) bal[exp.paidBy] += shareJPY; } });
+      exp.splitWith.forEach(uid => { 
+        if (exp.settledBy?.includes(uid)) return; 
+        if (uid !== exp.paidBy) { 
+          if (bal[uid] !== undefined) bal[uid] -= shareJPY; 
+          if (bal[exp.paidBy] !== undefined) bal[exp.paidBy] += shareJPY; 
+        } 
+      });
     });
     return bal;
   }, [expenses, rates, members]);
@@ -113,7 +138,11 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const currencies = activeCurrencies.filter(c => c !== 'JPY').join(', ');
-      const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: `Rates for 1 unit of [${currencies}] to JPY. Return JSON like {"HKD": 19.5}.`, config: { responseMimeType: "application/json" } });
+      const response = await ai.models.generateContent({ 
+        model: 'gemini-3-flash-preview', 
+        contents: `Rates for 1 unit of [${currencies}] to JPY. Return JSON like {"HKD": 19.5}.`, 
+        config: { responseMimeType: "application/json" } 
+      });
       const data = JSON.parse(response.text || "{}");
       setRates(prev => ({ ...prev, ...data, JPY: 1 }));
     } catch (e) { console.error(e); }
@@ -142,7 +171,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
 };
 
 const SettlementModal: React.FC<{ balances: Record<string, number>, displayCurrency: string, convert: any, members: TripMember[], onClose: () => void }> = ({ balances, displayCurrency, convert, members, onClose }) => {
-   // Fix: Explicitly type suggestions as any[] to avoid 'unknown' inference and fix map() error.
    const suggestions = useMemo<any[]>(() => { 
      const people = Object.entries(balances).map(([id, amount]) => ({ id, amount: amount as number })); 
      const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount); 
@@ -162,7 +190,7 @@ const SettlementModal: React.FC<{ balances: Record<string, number>, displayCurre
 
    return (
      <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={onClose}>
-       <div className="bg-paper w-full max-sm rounded-3xl p-6 border-4 border-stitch/30" onClick={e => e.stopPropagation()}>
+       <div className="bg-paper w-full max-w-sm rounded-3xl p-6 border-4 border-stitch/30" onClick={e => e.stopPropagation()}>
          <h3 className="text-lg font-black text-navy uppercase tracking-widest mb-6">Settlement</h3>
          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
            {suggestions.map((t, idx) => (
@@ -196,7 +224,7 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
 
   return (
     <div className="fixed inset-0 z-[110] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-paper w-full max-md rounded-t-3xl p-6 sticker-shadow border-t-4 border-stitch animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+      <div className="bg-paper w-full max-w-md rounded-t-3xl p-6 sticker-shadow border-t-4 border-stitch animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-black text-navy uppercase">{expense ? 'Edit Record' : 'New Record'}</h3>
           <button onClick={onClose} className="p-2 bg-cream rounded-full"><X size={20} /></button>
