@@ -29,6 +29,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   const [expenses, setExpenses] = useState<ExpenseType[]>(() => {
     const saved = localStorage.getItem('expenses');
     const parsed = saved ? JSON.parse(saved) : [];
+    // Ensure data is properly structured
     return parsed.map((e: any) => ({
       ...e,
       settledBy: e.settledBy || (e.isSettled ? e.splitWith : [])
@@ -118,7 +119,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   
   const todayDate = new Date().toISOString().split('T')[0];
 
-  // BUG FIX: All summaries and breakdowns now compute exclusively from the CURRENT expenses array
+  // FIX: Recalculate everything strictly based on current expenses array
   const todayStats = useMemo(() => {
     const todayExpenses = expenses.filter(e => e.date === todayDate);
     const totalJPY = todayExpenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
@@ -128,6 +129,11 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     };
   }, [expenses, rates, displayCurrency, todayDate]);
 
+  const totalSpentDisplay = useMemo(() => {
+    const totalJPY = expenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
+    return convert(totalJPY, 'JPY', displayCurrency);
+  }, [expenses, rates, displayCurrency]);
+
   const filteredExpenses = useMemo(() => {
     return expenses.filter(exp => {
       const matchSearch = exp.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -136,11 +142,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
       return matchSearch && matchDate;
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [expenses, searchTerm, selectedFilterDate]);
-
-  const totalSpentDisplay = useMemo(() => {
-    const totalJPY = expenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
-    return convert(totalJPY, 'JPY', displayCurrency);
-  }, [expenses, rates, displayCurrency]);
 
   const breakdownStats = useMemo(() => {
     if (breakdownMode === 'category') {
@@ -225,7 +226,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   };
 
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in duration-500 relative min-h-screen">
+    <div className="space-y-6 pb-24 animate-in relative min-h-screen">
       
       {/* --- DASHBOARD --- */}
       <div className="bg-white/90 backdrop-blur-md p-6 rounded-3xl-sticker sticker-shadow border border-stitch/20 relative overflow-hidden">
@@ -262,7 +263,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
               </h1>
            </div>
 
-           {/* Today's Summary Block - Added Click to filter */}
+           {/* Today's Summary Block - Interactive Filter */}
            <div 
              onClick={() => setSelectedFilterDate(selectedFilterDate === todayDate ? null : todayDate)}
              className={`p-4 mb-6 border rounded-2xl flex justify-between items-center cursor-pointer transition-all ${selectedFilterDate === todayDate ? 'bg-stitch text-white border-stitch shadow-lg scale-[1.02]' : 'bg-stitch/10 text-navy border-stitch/20 hover:bg-stitch/20'}`}
@@ -275,7 +276,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                <span className={`px-2 py-1 rounded-full text-[9px] font-black border ${selectedFilterDate === todayDate ? 'bg-white/20 border-white text-white' : 'bg-white border-stitch/20 text-stitch'}`}>
                  {todayStats.count} RECORDS
                </span>
-               <p className="text-[8px] font-bold mt-1 opacity-50">{selectedFilterDate === todayDate ? 'FILTER ACTIVE' : 'TAP TO VIEW'}</p>
+               <p className="text-[8px] font-bold mt-1 opacity-50">{selectedFilterDate === todayDate ? 'FILTER ON' : 'TAP TO VIEW'}</p>
              </div>
            </div>
 
@@ -296,9 +297,9 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         </div>
       </div>
 
-      {/* --- SEARCH BAR (Conditional) --- */}
+      {/* --- SEARCH BAR (Toggleable) --- */}
       {isSearchVisible && (
-        <div className="animate-in slide-in-from-top-2 duration-300">
+        <div className="animate-in">
           <div className="bg-white p-3 rounded-2xl border border-stitch/30 flex items-center gap-2">
             <Search size={16} className="text-stitch ml-1" />
             <input 
@@ -314,7 +315,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         </div>
       )}
 
-      {/* --- BREAKDOWN SECTION --- */}
+      {/* --- BREAKDOWN SECTION (Clickable Bars for Drill-down) --- */}
       <div className="bg-white p-5 rounded-2xl-sticker sticker-shadow border border-accent/40 relative overflow-hidden">
         <div className="flex justify-between items-center mb-4">
            <div className="flex gap-4">
@@ -362,29 +363,26 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
               </div>
               <div className="w-full h-2.5 bg-cream rounded-full overflow-hidden">
                  <div 
-                   className="h-full rounded-full transition-all duration-1000 ease-out"
+                   className="h-full rounded-full transition-all duration-700 ease-out"
                    style={{ 
                      width: `${stat.percent}%`,
                      backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : (selectedFilterDate === stat.name ? COLORS.stitch : COLORS.stitch + '44')
                    }}
                  />
               </div>
-              {breakdownMode === 'daily' && stat.name === selectedFilterDate && (
-                <div className="absolute -left-1 top-0 bottom-0 w-0.5 bg-stitch rounded-full animate-pulse" />
-              )}
             </div>
           )) : (
             <div className="py-4 text-center opacity-30 text-[10px] font-bold text-navy uppercase tracking-widest">
-               No spending data yet
+               No data available
             </div>
           )}
         </div>
         {breakdownMode === 'daily' && (
-           <p className="text-[8px] font-black text-navy/20 text-center mt-4 uppercase tracking-widest">Tap bars to filter history by date</p>
+           <p className="text-[8px] font-black text-navy/20 text-center mt-4 uppercase tracking-widest">Tap date for details</p>
         )}
       </div>
 
-      {/* --- EXPENSE LIST --- */}
+      {/* --- ACTIVITY LOG --- */}
       <div className="space-y-4 pt-2">
          <div className="flex justify-between items-center px-1">
             <h3 className="text-[11px] font-black text-navy/20 uppercase tracking-[0.3em] flex items-center gap-2">
@@ -393,7 +391,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
             {selectedFilterDate && (
                <button 
                  onClick={() => setSelectedFilterDate(null)}
-                 className="flex items-center gap-1 text-[9px] font-black text-stitch uppercase hover:text-navy transition-colors"
+                 className="flex items-center gap-1 text-[9px] font-black text-stitch uppercase"
                >
                  <FilterX size={10} /> Clear Filter
                </button>
@@ -415,30 +413,17 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                    onClick={() => setExpandedId(isExpanded ? null : exp.id)}
                    className={`
                       relative rounded-2xl-sticker border transition-all duration-300 overflow-hidden cursor-pointer 
-                      ${isExpanded ? 'bg-white border-stitch shadow-lg scale-[1.01] z-10' : 'bg-white border-accent/40 sticker-shadow hover:border-stitch/30'}
+                      ${isExpanded ? 'bg-white border-stitch shadow-lg scale-[1.01] z-10' : 'bg-white border-accent/40 sticker-shadow'}
                       ${allSettled ? 'opacity-70 bg-gray-50/50' : ''}
                    `}
                  >
                     <div className="p-4 flex items-center gap-4 relative">
-                       {/* Date Badge - Prominent */}
+                       {/* Date Badge */}
                        <div className="absolute top-2 right-4 text-[8px] font-black text-navy/20 uppercase tracking-widest flex items-center gap-1">
                          <Calendar size={8} /> {exp.date}
                        </div>
 
-                       {allSettled && (
-                          <div className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-200 z-20">
-                             <Check size={8} strokeWidth={4} />
-                             <span className="text-[8px] font-black uppercase tracking-wider">All Settled</span>
-                          </div>
-                       )}
-                       {partiallySettled && (
-                          <div className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full border border-orange-200 z-20">
-                             <CheckCircle2 size={8} strokeWidth={4} />
-                             <span className="text-[8px] font-black uppercase tracking-wider">Partial</span>
-                          </div>
-                       )}
-
-                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-inner flex-shrink-0 ${allSettled ? 'grayscale opacity-50 bg-gray-100' : 'bg-cream'}`} style={{ color: allSettled ? '#999' : getCategoryColor(exp.category) }}>
+                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-inner flex-shrink-0 bg-cream`} style={{ color: allSettled ? '#999' : getCategoryColor(exp.category) }}>
                           {exp.category === 'Food' || exp.category === 'Restaurant' ? '🍜' : 
                            exp.category === 'Transport' ? '🚕' : 
                            exp.category === 'Shopping' ? '🛍️' : 
@@ -449,7 +434,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                        <div className="flex-1 min-w-0">
                           <h4 className={`font-black text-sm truncate ${allSettled ? 'text-navy/50 line-through' : 'text-navy'}`}>{displayName}</h4>
                           <div className="flex items-center gap-2 mt-0.5">
-                             <img src={payer?.avatar} className={`w-4 h-4 rounded-full border border-white ${allSettled ? 'grayscale' : ''}`} />
+                             <img src={payer?.avatar} className={`w-4 h-4 rounded-full border border-white`} />
                              <span className="text-[10px] font-bold text-navy/40 uppercase">{payer?.name} Paid</span>
                           </div>
                        </div>
@@ -465,9 +450,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                     <div className={`bg-stitch/5 border-t border-stitch/10 overflow-hidden transition-[max-height, padding] duration-300 ease-in-out ${isExpanded ? 'max-h-80' : 'max-h-0'}`}>
                        <div className="p-4 flex flex-col gap-3">
                           <div className="bg-white rounded-xl border border-accent/40 p-3">
-                             <p className="text-[9px] font-bold text-navy/30 uppercase tracking-wider mb-2 flex items-center gap-1">
-                               <Users size={10} /> Split Status
-                             </p>
+                             <p className="text-[9px] font-bold text-navy/30 uppercase mb-2">Split Status</p>
                              <div className="space-y-2">
                                {exp.splitWith.map(uid => {
                                   const m = members.find(mem => mem.id === uid);
@@ -479,39 +462,35 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                                         onClick={(e) => toggleMemberSettled(e, exp.id, uid)}
                                         className={`w-full flex items-center justify-between p-2 rounded-lg border transition-all ${
                                            isMemberSettled 
-                                           ? 'bg-green-50 border-green-200 opacity-60' 
+                                           ? 'bg-green-50 border-green-200' 
                                            : isPayer 
                                               ? 'bg-cream border-transparent cursor-default'
-                                              : 'bg-white border-accent hover:border-stitch'
+                                              : 'bg-white border-accent'
                                         }`}
                                         disabled={isPayer}
                                      >
                                         <div className="flex items-center gap-2">
-                                           <img src={m?.avatar} className={`w-6 h-6 rounded-full border ${isMemberSettled ? 'grayscale' : 'border-white'}`} />
-                                           <span className={`text-[10px] font-black uppercase ${isMemberSettled ? 'text-green-600 line-through' : 'text-navy'}`}>
+                                           <img src={m?.avatar} className={`w-6 h-6 rounded-full border border-white`} />
+                                           <span className={`text-[10px] font-black uppercase ${isMemberSettled ? 'text-green-600' : 'text-navy'}`}>
                                               {m?.name} {isPayer && '(Payer)'}
                                            </span>
                                         </div>
-                                        {!isPayer && (
-                                           <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${isMemberSettled ? 'bg-green-500 border-green-500 text-white' : 'border-accent'}`}>
-                                              {isMemberSettled && <Check size={12} strokeWidth={3} />}
-                                           </div>
-                                        )}
+                                        {!isPayer && isMemberSettled && <Check size={12} className="text-green-600" />}
                                      </button>
                                   );
                                })}
                              </div>
                           </div>
-                          <div className="flex justify-end gap-2 pt-2 border-t border-navy/5">
+                          <div className="flex justify-end gap-2 pt-2">
                              <button 
                                onClick={(e) => { e.stopPropagation(); setEditingExpense(exp); setIsModalOpen(true); }}
-                               className="p-2 bg-white text-stitch rounded-xl shadow-sm border border-stitch/20 hover:bg-stitch hover:text-white transition-colors flex items-center gap-1 text-[10px] font-black px-3"
+                               className="p-2 bg-white text-stitch rounded-xl border border-stitch/20 text-[10px] font-black px-3"
                              >
                                 <Edit2 size={12} /> EDIT
                              </button>
                              <button 
                                onClick={(e) => { e.stopPropagation(); if(confirm('Delete record?')) setExpenses(expenses.filter(e => e.id !== exp.id)); }}
-                               className="p-2 bg-white text-red-400 rounded-xl shadow-sm border border-red-100 hover:bg-red-400 hover:text-white transition-colors flex items-center gap-1 text-[10px] font-black px-3"
+                               className="p-2 bg-white text-red-400 rounded-xl border border-red-100 text-[10px] font-black px-3"
                              >
                                 <Trash2 size={12} /> DELETE
                              </button>
@@ -523,20 +502,20 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
              })}
            </div>
          ) : (
-            <div className="py-24 text-center opacity-20 border-2 border-dashed border-accent rounded-3xl bg-paper/50">
+            <div className="py-24 text-center opacity-20 border-2 border-dashed border-accent rounded-3xl">
                <Wallet size={48} className="mx-auto mb-3" />
-               <p className="font-black uppercase text-[10px] tracking-widest">No expenses found</p>
+               <p className="font-black uppercase text-[10px] tracking-widest">Empty pocket</p>
             </div>
          )}
       </div>
 
-      {/* --- MODALS & DRAWERS (Stay same but ensure data consistency) --- */}
+      {/* --- SETTINGS DRAWER --- */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}>
-           <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-10 sticker-shadow animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+           <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-10 sticker-shadow animate-in slide-in-from-bottom" onClick={e => e.stopPropagation()}>
               <div className="w-12 h-1 bg-accent rounded-full mx-auto mb-6 opacity-50" />
               <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-lg font-black text-navy uppercase tracking-widest">Currency & Rates</h3>
+                 <h3 className="text-lg font-black text-navy uppercase tracking-widest">Settings</h3>
                  <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
               </div>
               <div className="mb-6">
@@ -546,37 +525,20 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                        <button 
                          key={cur}
                          onClick={() => setDisplayCurrency(cur)}
-                         className={`flex-shrink-0 px-4 py-2 rounded-xl border-2 font-black text-xs transition-all ${displayCurrency === cur ? 'bg-navy border-navy text-white shadow-md' : 'bg-white border-accent text-navy/40'}`}
+                         className={`flex-shrink-0 px-4 py-2 rounded-xl border-2 font-black text-xs ${displayCurrency === cur ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy/40'}`}
                        >
                          {cur}
                        </button>
                     ))}
                  </div>
               </div>
-              <div className="mb-6">
-                 <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Active Currencies</label>
-                 <div className="flex flex-wrap gap-2">
-                    {AVAILABLE_CURRENCIES.map(cur => {
-                       const isActive = activeCurrencies.includes(cur);
-                       return (
-                          <button 
-                             key={cur}
-                             onClick={() => setActiveCurrencies(prev => isActive ? prev.filter(c => c !== cur) : [...prev, cur])}
-                             className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${isActive ? 'bg-stitch/10 border-stitch text-stitch' : 'bg-cream border-transparent text-navy/20'}`}
-                          >
-                             {cur}
-                          </button>
-                       );
-                    })}
-                 </div>
-              </div>
               <button 
                  onClick={fetchRates}
                  disabled={loadingRates}
-                 className="w-full py-4 bg-navy text-white font-black rounded-2xl-sticker uppercase text-xs tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all"
+                 className="w-full py-4 bg-navy text-white font-black rounded-2xl uppercase text-xs tracking-widest flex items-center justify-center gap-2"
               >
                  <RefreshCw size={16} className={loadingRates ? 'animate-spin' : ''} />
-                 {loadingRates ? 'Syncing...' : 'Update Rates'}
+                 {loadingRates ? 'Syncing...' : 'Update Exchange Rates'}
               </button>
            </div>
         </div>
@@ -609,7 +571,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   );
 };
 
-// --- Sub-Components (Same as before but fixed TS) ---
+// --- Helper Components ---
 
 const SettlementModal: React.FC<{ 
    balances: Record<string, number>, 
@@ -630,13 +592,10 @@ const SettlementModal: React.FC<{
       while (i < debtors.length && j < creditors.length) {
          const debtor = debtors[i];
          const creditor = creditors[j];
-         
          const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
          transactions.push({ from: debtor.id, to: creditor.id, amount });
-         
          debtor.amount += amount;
          creditor.amount -= amount;
-         
          if (Math.abs(debtor.amount) < 1) i++;
          if (creditor.amount < 1) j++;
       }
@@ -645,7 +604,7 @@ const SettlementModal: React.FC<{
 
    return (
      <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={onClose}>
-        <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/30 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+        <div className="bg-paper w-full max-w-sm rounded-3xl p-6 sticker-shadow border-4 border-stitch/30 animate-in" onClick={e => e.stopPropagation()}>
            <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-black text-navy uppercase tracking-widest">Settlement Plan</h3>
               <button onClick={onClose} className="p-2 bg-cream rounded-full text-navy/20"><X size={20} /></button>
@@ -658,9 +617,9 @@ const SettlementModal: React.FC<{
                  return (
                     <div key={idx} className="bg-white p-4 rounded-2xl border border-accent flex items-center justify-between">
                        <div className="flex items-center gap-3">
-                          <img src={from?.avatar} className="w-8 h-8 rounded-full border border-red-200" />
-                          <div className="flex flex-col items-center px-2 text-navy/20"><ArrowRight size={14} /></div>
-                          <img src={to?.avatar} className="w-8 h-8 rounded-full border border-stitch" />
+                          <img src={from?.avatar} className="w-8 h-8 rounded-full" />
+                          <ArrowRight size={14} className="text-navy/20" />
+                          <img src={to?.avatar} className="w-8 h-8 rounded-full" />
                        </div>
                        <div className="text-right">
                           <p className="font-black text-navy text-lg">{displayCurrency} {amountDisplay.toLocaleString()}</p>
@@ -668,7 +627,7 @@ const SettlementModal: React.FC<{
                     </div>
                  );
               }) : (
-                 <div className="py-12 text-center text-navy/30 font-black uppercase tracking-widest">All settled!</div>
+                 <div className="py-12 text-center text-navy/30 font-black uppercase">All clear!</div>
               )}
            </div>
         </div>
@@ -691,11 +650,11 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
   const categories = ['Food', 'Restaurant', 'Transport', 'Shopping', 'Stay', 'Ticket', 'Attraction', 'Other'];
 
   return (
-    <div className="fixed inset-0 z-[150] flex flex-col bg-cream/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300">
+    <div className="fixed inset-0 z-[150] flex flex-col bg-cream/95 backdrop-blur-md animate-in">
       <div className="p-4 flex justify-between items-center border-b border-accent bg-white/80">
         <button onClick={onClose} className="text-navy/20 p-2"><X size={24} /></button>
-        <h3 className="text-lg font-black text-navy uppercase tracking-[0.2em]">{expense ? 'Edit Record' : 'New Record'}</h3>
-        <button onClick={() => onSave({ ...formData, title: formData.title || formData.category } as ExpenseType)} className="text-stitch font-black p-2" disabled={!formData.amount || formData.splitWith?.length === 0}>SAVE</button>
+        <h3 className="text-lg font-black text-navy uppercase tracking-[0.2em]">{expense ? 'Edit' : 'New'} Record</h3>
+        <button onClick={() => onSave({ ...formData, title: formData.title || formData.category } as ExpenseType)} className="text-stitch font-black p-2" disabled={!formData.amount}>SAVE</button>
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
          <div className="bg-white p-8 rounded-3xl-sticker sticker-shadow border border-accent/30 text-center">
@@ -708,11 +667,11 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
          </div>
          <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow space-y-4">
             <div>
-               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1"><Tag size={12} /> Name</label>
-               <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="e.g. Takoyaki" className="w-full font-black text-navy border-none focus:ring-0 p-0 text-xl" />
+               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest"><Tag size={12} /> Name</label>
+               <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="e.g. Ramen" className="w-full font-black text-navy border-none focus:ring-0 p-0 text-xl" />
             </div>
             <div className="pt-4 border-t border-accent/10">
-               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1"><Calendar size={12} /> Date</label>
+               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest"><Calendar size={12} /> Date</label>
                <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full font-bold text-navy bg-transparent border-none focus:ring-0 p-0" />
             </div>
          </div>
@@ -729,7 +688,7 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
                {members.map(m => (
                   <button key={m.id} onClick={() => setFormData({ ...formData, paidBy: m.id })} className={`flex-shrink-0 flex flex-col items-center gap-2 transition-all ${formData.paidBy === m.id ? 'opacity-100 scale-110' : 'opacity-40 grayscale'}`}>
-                     <img src={m.avatar} className={`w-10 h-10 rounded-full object-cover border-2 ${formData.paidBy === m.id ? 'border-stitch shadow-md' : 'border-transparent'}`} />
+                     <img src={m.avatar} className={`w-10 h-10 rounded-full object-cover border-2 ${formData.paidBy === m.id ? 'border-stitch' : 'border-transparent'}`} />
                      <span className="text-[9px] font-black uppercase">{m.name}</span>
                   </button>
                ))}
@@ -748,7 +707,7 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                            const newSplit = isSelected ? current.filter(id => id !== m.id) : [...current, m.id];
                            setFormData({ ...formData, splitWith: newSplit });
                         }} 
-                        className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${isSelected ? 'bg-stitch/10 border-stitch text-navy' : 'bg-white border-accent/40 text-navy/20'}`}
+                        className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${isSelected ? 'bg-stitch/10 border-stitch text-navy' : 'bg-white border-accent text-navy/20'}`}
                      >
                         <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-stitch border-stitch' : 'border-accent'}`}>{isSelected && <Check size={12} className="text-white" />}</div>
                         <span className="text-[10px] font-black uppercase tracking-widest">{m.name}</span>
@@ -761,5 +720,12 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
     </div>
   );
 };
+
+// Internal icon component for FilterX
+const FilterX = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 3h10v2h-10z"/><path d="M11 9h10v2h-10z"/><path d="M11 15h10v2h-10z"/><path d="M4 3h2v18h-2z"/><path d="M7 6l-3-3-3 3"/>
+  </svg>
+);
 
 export default Expense;
