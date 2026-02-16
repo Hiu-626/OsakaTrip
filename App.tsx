@@ -145,7 +145,7 @@ const App: React.FC = () => {
         <NavButton active={activeTab === 'schedule'} onClick={() => handleNavigate('schedule')} icon={<Calendar size={22} />} label="行程" />
         <NavButton active={activeTab === 'bookings'} onClick={() => handleNavigate('bookings')} icon={<Ticket size={22} />} label="票券" />
         <NavButton active={activeTab === 'expense'} onClick={() => handleNavigate('expense')} icon={<Wallet size={22} />} label="記帳" />
-        <NavButton active={activeTab === 'planning'} onClick={() => handleNavigate('planning'} icon={<CheckSquare size={22} />} label="清單" />
+        <NavButton active={activeTab === 'planning'} onClick={() => handleNavigate('planning')} icon={<CheckSquare size={22} />} label="清單" />
       </nav>
     </div>
   );
