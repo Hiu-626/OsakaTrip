@@ -299,7 +299,8 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     const linkedItem = itinerary.find(i => i.id === booking.linkedScheduleId);
 
     // Helper for conditional rendering - Hides empty fields
-    const DetailField = ({ label, value, fullWidth = false, className = '' }: { label: string, value: any, fullWidth?: boolean, className?: string }) => {
+    // Fix: Added key to type definition to satisfy React list requirements in some TS environments
+    const DetailField = ({ label, value, fullWidth = false, className = '' }: { label: string, value: any, fullWidth?: boolean, className?: string, key?: React.Key }) => {
        if (!value || value === '') return null;
        return (
          <div className={`${fullWidth ? 'col-span-2' : ''} ${className}`}>
@@ -435,7 +436,8 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
                     'arrivalTime', 'time', 'date', 'airline', 'flightNo', 'class', 'room', 'vehicle'
                 ];
                 if (ignoredKeys.includes(key)) return null;
-                return <DetailField key={key} label={key} value={value} fullWidth={String(value).length > 20} />;
+                // Fix: Cast value to any to satisfy TS when component is used in a map with potentially unknown types
+                return <DetailField key={key} label={key} value={value as any} fullWidth={String(value).length > 20} />;
              })}
           </div>
 

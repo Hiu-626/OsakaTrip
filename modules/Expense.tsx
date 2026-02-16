@@ -20,7 +20,10 @@ import {
   Tag,
   PieChart,
   CheckCircle2,
-  Users
+  Users,
+  Search,
+  ChevronRight,
+  BarChart3
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { COLORS } from '../constants';
@@ -30,10 +33,9 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   const [expenses, setExpenses] = useState<ExpenseType[]>(() => {
     const saved = localStorage.getItem('expenses');
     const parsed = saved ? JSON.parse(saved) : [];
-    // Migration: ensure settledBy array exists if coming from old data
     return parsed.map((e: any) => ({
       ...e,
-      settledBy: e.settledBy || (e.isSettled ? e.splitWith : []) // if old binary 'isSettled' was true, mark everyone as settled
+      settledBy: e.settledBy || (e.isSettled ? e.splitWith : [])
     }));
   });
 
@@ -59,6 +61,11 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseType | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
+  
+  // New States: Breakdown Mode, Search, etc.
+  const [breakdownMode, setBreakdownMode] = useState<'category' | 'daily'>('category');
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const AVAILABLE_CURRENCIES = ['JPY', 'HKD', 'AUD', 'USD', 'EUR', 'GBP', 'TWD', 'KRW', 'SGD', 'CNY', 'THB'];
 
@@ -94,7 +101,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     return map[cat] || COLORS.other;
   };
 
-  // Toggle settled status for a specific member
   const toggleMemberSettled = (e: React.MouseEvent, expenseId: string, memberId: string) => {
     e.stopPropagation();
     setExpenses(prev => prev.map(exp => {
@@ -112,33 +118,40 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     }));
   };
 
-  // --- Smart Settlement Logic ---
+  // --- Derived Data ---
+  
+  const todayDate = new Date().toISOString().split('T')[0];
+
+  const todayStats = useMemo(() => {
+    const todayExpenses = expenses.filter(e => e.date === todayDate);
+    const totalJPY = todayExpenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
+    return {
+      count: todayExpenses.length,
+      total: convert(totalJPY, 'JPY', displayCurrency)
+    };
+  }, [expenses, rates, displayCurrency, todayDate]);
+
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(exp => {
+      const matchSearch = exp.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          exp.category.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchSearch;
+    }).sort((a, b) => b.date.localeCompare(a.date));
+  }, [expenses, searchTerm]);
+
   const balances = useMemo(() => {
     const bal: Record<string, number> = {};
     members.forEach(m => bal[m.id] = 0);
     
     expenses.forEach(exp => {
-      // 1. Normalize everything to JPY (Pivot)
       const amountInJPY = exp.amount * (rates[exp.currency] || 1);
-      
-      // 2. Calculate Debtor share per person
       const splitCount = exp.splitWith.length || 1;
       const shareInJPY = amountInJPY / splitCount;
       
-      // 3. Process each splitter
       exp.splitWith.forEach(debtorId => {
-        const isSelf = debtorId === exp.paidBy;
-        
-        // Skip if this specific debtor has settled ("找左數")
-        // Or if it's the payer themselves (no debt to self)
-        if (exp.settledBy?.includes(debtorId)) {
-          return; 
-        }
-
-        if (!isSelf) {
-          // Debtor owes share
+        if (exp.settledBy?.includes(debtorId)) return; 
+        if (debtorId !== exp.paidBy) {
           if (bal[debtorId] !== undefined) bal[debtorId] -= shareInJPY;
-          // Payer receives credit ONLY for the unsettled parts
           if (bal[exp.paidBy] !== undefined) bal[exp.paidBy] += shareInJPY;
         }
       });
@@ -146,32 +159,46 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     return bal;
   }, [expenses, rates, members]);
 
-  // Total spent (Includes everything regardless of settlement, just for stats)
   const totalSpentDisplay = useMemo(() => {
     const totalJPY = expenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
     return convert(totalJPY, 'JPY', displayCurrency);
   }, [expenses, rates, displayCurrency]);
 
-  // Category Breakdown Logic
-  const categoryStats = useMemo(() => {
-    const stats: Record<string, number> = {};
-    let total = 0;
-    
-    expenses.forEach(exp => {
-      const val = convert(exp.amount, exp.currency, displayCurrency);
-      const cat = exp.category || 'Other';
-      stats[cat] = (stats[cat] || 0) + val;
-      total += val;
-    });
-
-    return Object.entries(stats)
-      .map(([name, value]) => ({ 
-        name, 
-        value, 
-        percent: total > 0 ? (value / total) * 100 : 0 
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [expenses, rates, displayCurrency]);
+  const breakdownStats = useMemo(() => {
+    if (breakdownMode === 'category') {
+      const stats: Record<string, number> = {};
+      let total = 0;
+      expenses.forEach(exp => {
+        const val = convert(exp.amount, exp.currency, displayCurrency);
+        const cat = exp.category || 'Other';
+        stats[cat] = (stats[cat] || 0) + val;
+        total += val;
+      });
+      return Object.entries(stats)
+        .map(([name, value]) => ({ 
+          name, 
+          value, 
+          percent: total > 0 ? (value / total) * 100 : 0 
+        }))
+        .sort((a, b) => b.value - a.value);
+    } else {
+      const stats: Record<string, number> = {};
+      let total = 0;
+      expenses.forEach(exp => {
+        const val = convert(exp.amount, exp.currency, displayCurrency);
+        const date = exp.date;
+        stats[date] = (stats[date] || 0) + val;
+        total += val;
+      });
+      return Object.entries(stats)
+        .map(([name, value]) => ({ 
+          name, 
+          value, 
+          percent: total > 0 ? (value / total) * 100 : 0 
+        }))
+        .sort((a, b) => b.name.localeCompare(a.name)); // Sort by date descending
+    }
+  }, [expenses, rates, displayCurrency, breakdownMode]);
 
   const fetchRates = async () => {
     if (!process.env.API_KEY) {
@@ -182,21 +209,18 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const currenciesToFetch = activeCurrencies.filter(c => c !== 'JPY').join(', ');
-      
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Get real-time exchange rates for 1 unit of [${currenciesToFetch}] to JPY. Return valid JSON only, like {"HKD": 19.5, "USD": 150.2}.`,
         config: { responseMimeType: "application/json" }
       });
-      
       const jsonText = response.text || "{}";
       const newRatesData = JSON.parse(jsonText);
-      
       setRates(prev => ({ ...prev, ...newRatesData, JPY: 1 }));
-      alert("匯率已更新！ (Rates updated)");
+      alert("匯率已更新！");
     } catch (e) {
       console.error(e);
-      alert("匯率更新失敗 (Failed to update rates).");
+      alert("匯率更新失敗。");
     } finally {
       setLoadingRates(false);
     }
@@ -212,15 +236,23 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         <div className="relative z-10">
            <div className="flex justify-between items-center mb-2">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-navy/30">Total Trip Spending</p>
-              <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="flex items-center gap-1 px-2 py-1 bg-cream rounded-lg text-[9px] font-black text-navy/40 hover:text-stitch transition-colors"
-              >
-                 <Settings2 size={12} /> Manage
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setIsSearchVisible(!isSearchVisible)}
+                  className={`p-1.5 rounded-lg transition-colors ${isSearchVisible ? 'bg-stitch text-white' : 'bg-cream text-navy/40 hover:text-stitch'}`}
+                >
+                  <Search size={14} />
+                </button>
+                <button 
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="flex items-center gap-1 px-2 py-1 bg-cream rounded-lg text-[9px] font-black text-navy/40 hover:text-stitch transition-colors"
+                >
+                  <Settings2 size={12} /> Manage
+                </button>
+              </div>
            </div>
 
-           <div className="flex items-baseline gap-2 mb-6">
+           <div className="flex items-baseline gap-2 mb-4">
               <button 
                 onClick={() => setIsSettingsOpen(true)}
                 className="text-2xl font-black text-stitch/80 hover:bg-stitch/10 px-2 rounded-lg transition-colors flex items-center gap-1"
@@ -230,6 +262,19 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
               <h1 className="text-5xl font-black text-navy tracking-tight">
                  {Math.round(totalSpentDisplay).toLocaleString()}
               </h1>
+           </div>
+
+           {/* Today's Summary Block */}
+           <div className="bg-stitch/10 rounded-2xl p-4 mb-6 border border-stitch/20 flex justify-between items-center">
+             <div>
+               <p className="text-[9px] font-black text-stitch uppercase tracking-widest mb-0.5">Today's Summary</p>
+               <h4 className="text-xl font-black text-navy">{displayCurrency} {Math.round(todayStats.total).toLocaleString()}</h4>
+             </div>
+             <div className="text-right">
+               <span className="bg-white px-2 py-1 rounded-full text-[9px] font-black text-stitch border border-stitch/20">
+                 {todayStats.count} RECORDS
+               </span>
+             </div>
            </div>
 
            <div className="grid grid-cols-2 gap-3">
@@ -249,23 +294,52 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         </div>
       </div>
 
-      {/* --- CATEGORY BREAKDOWN --- */}
+      {/* --- SEARCH BAR (Conditional) --- */}
+      {isSearchVisible && (
+        <div className="animate-in slide-in-from-top-2 duration-300">
+          <div className="bg-white p-3 rounded-2xl border border-stitch/30 flex items-center gap-2">
+            <Search size={16} className="text-stitch ml-1" />
+            <input 
+              type="text" 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search title or category..."
+              className="flex-1 bg-transparent border-none focus:ring-0 text-sm font-bold text-navy p-0"
+              autoFocus
+            />
+            {searchTerm && <button onClick={() => setSearchTerm('')}><X size={16} className="text-navy/20" /></button>}
+          </div>
+        </div>
+      )}
+
+      {/* --- BREAKDOWN SECTION --- */}
       <div className="bg-white p-5 rounded-2xl-sticker sticker-shadow border border-accent/40 relative overflow-hidden">
         <div className="flex justify-between items-center mb-4">
-           <h3 className="text-[10px] font-black text-navy/30 uppercase tracking-[0.2em] flex items-center gap-1">
-             <PieChart size={12} /> Breakdown
-           </h3>
+           <div className="flex gap-4">
+              <button 
+                onClick={() => setBreakdownMode('category')}
+                className={`text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 transition-colors ${breakdownMode === 'category' ? 'text-stitch' : 'text-navy/20'}`}
+              >
+                <PieChart size={12} /> By Category
+              </button>
+              <button 
+                onClick={() => setBreakdownMode('daily')}
+                className={`text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 transition-colors ${breakdownMode === 'daily' ? 'text-stitch' : 'text-navy/20'}`}
+              >
+                <BarChart3 size={12} /> By Date
+              </button>
+           </div>
            <span className="text-[9px] font-bold text-navy/20">in {displayCurrency}</span>
         </div>
         
         <div className="space-y-4">
-          {categoryStats.length > 0 ? categoryStats.map((stat, idx) => (
+          {breakdownStats.length > 0 ? breakdownStats.map((stat, idx) => (
             <div key={stat.name} className="relative group">
               <div className="flex justify-between items-end mb-1.5 z-10 relative">
                  <div className="flex items-center gap-2">
                     <span 
                        className="w-2 h-2 rounded-full" 
-                       style={{ backgroundColor: getCategoryColor(stat.name) }}
+                       style={{ backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch }}
                     />
                     <span className="text-xs font-black text-navy">{stat.name}</span>
                  </div>
@@ -274,13 +348,12 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                    <span className="text-xs font-black text-navy">{Math.round(stat.percent)}%</span>
                  </div>
               </div>
-              
               <div className="w-full h-2.5 bg-cream rounded-full overflow-hidden">
                  <div 
                    className="h-full rounded-full transition-all duration-1000 ease-out"
                    style={{ 
                      width: `${stat.percent}%`,
-                     backgroundColor: getCategoryColor(stat.name) 
+                     backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch 
                    }}
                  />
               </div>
@@ -299,14 +372,12 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
             Activity Log
          </h3>
 
-         {expenses.length > 0 ? (
+         {filteredExpenses.length > 0 ? (
            <div className="space-y-3">
-             {expenses.map((exp) => {
+             {filteredExpenses.map((exp) => {
                const payer = members.find(m => m.id === exp.paidBy);
                const isExpanded = expandedId === exp.id;
                const displayName = exp.title || exp.category;
-               
-               // Determine full settled status
                const allSettled = exp.splitWith.length > 0 && exp.splitWith.every(id => exp.settledBy?.includes(id));
                const partiallySettled = exp.settledBy && exp.settledBy.length > 0 && !allSettled;
 
@@ -320,17 +391,18 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                       ${allSettled ? 'opacity-70 bg-gray-50/50' : ''}
                    `}
                  >
-                    {/* Collapsed View */}
                     <div className="p-4 flex items-center gap-4 relative">
-                       {/* Fully Settled Badge */}
+                       {/* Date Badge */}
+                       <div className="absolute top-2 right-14 text-[8px] font-black text-navy/20 uppercase tracking-widest flex items-center gap-1">
+                         <Calendar size={8} /> {exp.date}
+                       </div>
+
                        {allSettled && (
                           <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-200 z-20">
                              <Check size={8} strokeWidth={4} />
                              <span className="text-[8px] font-black uppercase tracking-wider">All Settled</span>
                           </div>
                        )}
-                       
-                       {/* Partially Settled Badge */}
                        {partiallySettled && (
                           <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full border border-orange-200 z-20">
                              <CheckCircle2 size={8} strokeWidth={4} />
@@ -338,7 +410,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                           </div>
                        )}
 
-                       {/* Icon */}
                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-inner flex-shrink-0 ${allSettled ? 'grayscale opacity-50 bg-gray-100' : 'bg-cream'}`} style={{ color: allSettled ? '#999' : getCategoryColor(exp.category) }}>
                           {exp.category === 'Food' || exp.category === 'Restaurant' ? '🍜' : 
                            exp.category === 'Transport' ? '🚕' : 
@@ -347,7 +418,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                            exp.category === 'Attraction' || exp.category === 'Ticket' ? '🎫' : '💸'}
                        </div>
 
-                       {/* Main Details */}
                        <div className="flex-1 min-w-0">
                           <h4 className={`font-black text-sm truncate ${allSettled ? 'text-navy/50 line-through' : 'text-navy'}`}>{displayName}</h4>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -356,7 +426,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                           </div>
                        </div>
 
-                       {/* Amount */}
                        <div className="text-right">
                           <p className={`font-black text-sm ${allSettled ? 'text-navy/40' : 'text-navy'}`}>{formatMoney(exp.amount, exp.currency)}</p>
                           <p className="text-[9px] font-bold text-navy/20">
@@ -365,11 +434,8 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                        </div>
                     </div>
 
-                    {/* Expanded View: Settlement Toggles */}
                     <div className={`bg-stitch/5 border-t border-stitch/10 overflow-hidden transition-[max-height, padding] duration-300 ease-in-out ${isExpanded ? 'max-h-80' : 'max-h-0'}`}>
                        <div className="p-4 flex flex-col gap-3">
-                          
-                          {/* Splitter Settlement List */}
                           <div className="bg-white rounded-xl border border-accent/40 p-3">
                              <p className="text-[9px] font-bold text-navy/30 uppercase tracking-wider mb-2 flex items-center gap-1">
                                <Users size={10} /> Split Status (Tap to toggle settled)
@@ -379,7 +445,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                                   const m = members.find(mem => mem.id === uid);
                                   const isMemberSettled = exp.settledBy?.includes(uid);
                                   const isPayer = uid === exp.paidBy;
-
                                   return (
                                      <button 
                                         key={uid}
@@ -391,7 +456,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                                               ? 'bg-cream border-transparent cursor-default'
                                               : 'bg-white border-accent hover:border-stitch'
                                         }`}
-                                        disabled={isPayer} // Payer doesn't need to "settle" with themselves
+                                        disabled={isPayer}
                                      >
                                         <div className="flex items-center gap-2">
                                            <img src={m?.avatar} className={`w-6 h-6 rounded-full border ${isMemberSettled ? 'grayscale' : 'border-white'}`} />
@@ -399,7 +464,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                                               {m?.name} {isPayer && '(Payer)'}
                                            </span>
                                         </div>
-                                        {/* Status Icon */}
                                         {!isPayer && (
                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border ${isMemberSettled ? 'bg-green-500 border-green-500 text-white' : 'border-accent'}`}>
                                               {isMemberSettled && <Check size={12} strokeWidth={3} />}
@@ -410,7 +474,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                                })}
                              </div>
                           </div>
-                          
                           <div className="flex justify-end gap-2 pt-2 border-t border-navy/5">
                              <button 
                                onClick={(e) => { e.stopPropagation(); setEditingExpense(exp); setIsModalOpen(true); }}
@@ -434,7 +497,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
          ) : (
             <div className="py-24 text-center opacity-20 border-2 border-dashed border-accent rounded-3xl bg-paper/50">
                <Wallet size={48} className="mx-auto mb-3" />
-               <p className="font-black uppercase text-[10px] tracking-widest">No expenses yet</p>
+               <p className="font-black uppercase text-[10px] tracking-widest">No expenses found</p>
             </div>
          )}
       </div>
@@ -444,12 +507,10 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}>
            <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-10 sticker-shadow animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
               <div className="w-12 h-1 bg-accent rounded-full mx-auto mb-6 opacity-50" />
-              
               <div className="flex justify-between items-center mb-6">
                  <h3 className="text-lg font-black text-navy uppercase tracking-widest">Currency & Rates</h3>
                  <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
               </div>
-
               <div className="mb-6">
                  <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Display Currency</label>
                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -464,7 +525,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                     ))}
                  </div>
               </div>
-
               <div className="mb-6">
                  <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Active Currencies</label>
                  <div className="flex flex-wrap gap-2">
@@ -482,7 +542,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                     })}
                  </div>
               </div>
-              
               <button 
                  onClick={fetchRates}
                  disabled={loadingRates}
@@ -535,11 +594,12 @@ const SettlementModal: React.FC<{
 }> = ({ balances, displayCurrency, convert, members, onClose }) => {
    
    const suggestions = useMemo(() => {
-      const people = Object.entries(balances).map(([id, amount]) => ({ id, amount }));
+      // Fix: Explicitly cast amount to number to satisfy arithmetic operations on unknown types
+      const people = Object.entries(balances).map(([id, amount]) => ({ id, amount: amount as number }));
       const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount);
       const creditors = people.filter(p => p.amount > 1).sort((a, b) => b.amount - a.amount);
       
-      const transactions = [];
+      const transactions: { from: string; to: string; amount: number }[] = [];
       let i = 0, j = 0;
       
       while (i < debtors.length && j < creditors.length) {
@@ -565,19 +625,16 @@ const SettlementModal: React.FC<{
               <h3 className="text-lg font-black text-navy uppercase tracking-widest">Settlement Plan</h3>
               <button onClick={onClose} className="p-2 bg-cream rounded-full text-navy/20"><X size={20} /></button>
            </div>
-
            <div className="mb-4 p-3 bg-stitch/10 rounded-xl border border-stitch/20 text-center">
              <p className="text-[10px] font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-1">
                <CheckCircle2 size={12} /> Calculates outstanding debts only
              </p>
            </div>
-           
            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
               {suggestions.length > 0 ? suggestions.map((tx, idx) => {
                  const from = members.find(m => m.id === tx.from);
                  const to = members.find(m => m.id === tx.to);
                  const amountDisplay = Math.round(convert(tx.amount, 'JPY', displayCurrency));
-                 
                  return (
                     <div key={idx} className="bg-white p-4 rounded-2xl border border-accent flex items-center justify-between">
                        <div className="flex items-center gap-3">
@@ -631,9 +688,7 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
            SAVE
         </button>
       </div>
-
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
-         {/* Amount Input */}
          <div className="bg-white p-8 rounded-3xl-sticker sticker-shadow border border-accent/30 text-center shadow-inner">
             <div className="flex items-center justify-center gap-2">
                <div className="relative">
@@ -656,8 +711,6 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                />
             </div>
          </div>
-
-         {/* Title (Name) & Date Input */}
          <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner space-y-4">
             <div>
                <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1">
@@ -671,7 +724,6 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                  className="w-full font-black text-navy border-none focus:ring-0 p-0 text-xl placeholder:text-navy/10" 
                />
             </div>
-            
             <div className="pt-4 border-t border-accent/10">
                <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1">
                   <Calendar size={12} /> Date
@@ -684,8 +736,6 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                />
             </div>
          </div>
-
-         {/* Category Chips */}
          <div>
             <label className="text-[10px] font-black uppercase text-navy/20 mb-3 block px-1 tracking-widest">Category (Icon)</label>
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -700,8 +750,6 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                ))}
             </div>
          </div>
-
-         {/* Payer */}
          <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
             <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">Paid By</label>
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
@@ -713,8 +761,6 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                ))}
             </div>
          </div>
-
-         {/* Split With */}
          <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
             <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">Split With</label>
             <div className="grid grid-cols-2 gap-3">
@@ -725,7 +771,6 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                         key={m.id} 
                         onClick={() => {
                            const current = formData.splitWith || [];
-                           // If unselecting, ensure we also remove from settledBy to prevent ghost settlements
                            const newSplit = isSelected ? current.filter(id => id !== m.id) : [...current, m.id];
                            const newSettled = isSelected 
                               ? (formData.settledBy || []).filter(id => id !== m.id) 
