@@ -3,13 +3,9 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// 安全地獲取環境變數，如果 process.env 未定義則使用空字串
+// 從 window.process 獲取環境變數
 const getEnv = (key: string) => {
-  try {
-    return (process.env as any)?.[key] || "";
-  } catch (e) {
-    return "";
-  }
+  return (window as any).process?.env?.[key] || "";
 };
 
 const firebaseConfig = {
@@ -21,10 +17,16 @@ const firebaseConfig = {
   appId: getEnv('VITE_FIREBASE_APP_ID')
 };
 
-// 初始化 Firebase
-const app = initializeApp(firebaseConfig);
+// 只有在提供 API Key 的情況下才初始化
+let app;
+let auth: any = null;
+let db: any = null;
 
-// 導出功能
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+if (firebaseConfig.apiKey) {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+}
+
+export { auth, db };
 export default app;

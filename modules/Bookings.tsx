@@ -23,6 +23,7 @@ import {
   ChevronUp,
   ChevronDown,
   Download,
+  AlertTriangle,
   Link
 } from 'lucide-react';
 import { Booking, TripMember, ScheduleItem } from '../types.ts';
@@ -86,7 +87,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('Delete?')) {
+    if (confirm('Delete this booking?')) {
       setBookings(bookings.filter(b => b.id !== id));
       if (expandedId === id) setExpandedId(null);
     }
@@ -197,9 +198,9 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
           </div>
         </div>
         <div className={`w-10 flex flex-col items-center justify-center gap-1 border-l ${booking.type === 'Flight' ? 'border-white/10 bg-black/10' : 'border-black/5 bg-black/5'}`} onClick={e => e.stopPropagation()}>
-           <button onClick={(e) => handleMove(e, booking.id, 'up')} disabled={index === 0} className="p-1.5 rounded-full hover:bg-white/20 disabled:opacity-20"><ChevronUp size={14} /></button>
-           <button onClick={(e) => handleDuplicate(e, booking)} className="p-1.5 rounded-full hover:bg-white/20"><CopyPlus size={12} /></button>
-           <button onClick={(e) => handleMove(e, booking.id, 'down')} disabled={index === total - 1} className="p-1.5 rounded-full hover:bg-white/20 disabled:opacity-20"><ChevronDown size={14} /></button>
+           <button onClick={(e) => handleMove(e, booking.id, 'up')} disabled={index === 0} className="p-1.5 rounded-full hover:bg-white/20 disabled:opacity-20 transition-all"><ChevronUp size={14} /></button>
+           <button onClick={(e) => handleDuplicate(e, booking)} className="p-1.5 rounded-full hover:bg-white/20 active:scale-90 transition-all"><CopyPlus size={12} /></button>
+           <button onClick={(e) => handleMove(e, booking.id, 'down')} disabled={index === total - 1} className="p-1.5 rounded-full hover:bg-white/20 disabled:opacity-20 transition-all"><ChevronDown size={14} /></button>
         </div>
       </div>
     );
@@ -209,7 +210,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
     const hasImage = !!booking.imageUrl;
     const linkedItem = itinerary.find(i => i.id === booking.linkedScheduleId);
     
-    const DetailField = ({ label, value, fullWidth = false }: { label: string, value: any, fullWidth?: boolean }) => {
+    const DetailField = ({ label, value, fullWidth = false }: { label: string, value: any, fullWidth?: boolean, key?: string }) => {
        if (!value || value === '') return null;
        return (
          <div className={`${fullWidth ? 'col-span-2' : ''}`}>
@@ -225,9 +226,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
           <div onClick={() => onNavigate('schedule')} className="bg-stitch/10 px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-stitch/20 transition-colors border-b border-dashed border-stitch/30">
              <div className="flex items-center gap-2 overflow-hidden">
                 <MapPin size={12} className="text-stitch flex-shrink-0" />
-                <span className="text-[10px] font-black uppercase text-stitch truncate">
-                  Linked to: Day {linkedItem.dayIndex + 1} - {linkedItem.location}
-                </span>
+                <span className="text-[10px] font-black uppercase text-stitch truncate">Linked to: Day {linkedItem.dayIndex + 1} - {linkedItem.location}</span>
              </div>
              <ArrowUpRight size={12} className="text-stitch" />
           </div>
@@ -236,9 +235,7 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
           <div className="p-4 bg-white">
             <div className="w-full rounded-xl border-2 border-navy/5 p-1 shadow-inner bg-cream relative group">
               <img src={booking.imageUrl} alt="Voucher" className="w-full h-auto max-h-[300px] object-contain rounded-lg mix-blend-multiply" />
-              <a href={booking.imageUrl} download={`ticket-${booking.id}.jpg`} onClick={e => e.stopPropagation()} className="absolute bottom-2 right-2 p-2 bg-white/80 rounded-full shadow-sm text-navy/40 hover:text-navy opacity-0 group-hover:opacity-100 transition-opacity">
-                <Download size={14} />
-              </a>
+              <a href={booking.imageUrl} download={`ticket-${booking.id}.jpg`} onClick={e => e.stopPropagation()} className="absolute bottom-2 right-2 p-2 bg-white/80 rounded-full shadow-sm text-navy/40 hover:text-navy opacity-0 group-hover:opacity-100 transition-opacity"><Download size={14} /></a>
             </div>
           </div>
         )}
@@ -262,17 +259,9 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
               <>
                 {(booking.details.from || booking.details.to) && (
                   <div className="col-span-2 flex items-center gap-4 p-3 rounded-xl border border-accent/30 bg-white shadow-sm mb-1">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">From</p>
-                      <p className="text-xl font-black text-navy truncate">{booking.details.from}</p>
-                      <p className="text-[10px] font-bold text-navy/40">{booking.details.time}</p>
-                    </div>
+                    <div className="flex-1 min-w-0"><p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">From</p><p className="text-xl font-black text-navy truncate">{booking.details.from}</p><p className="text-[10px] font-bold text-navy/40">{booking.details.time}</p></div>
                     <div className="flex flex-col items-center gap-1 opacity-20"><Plane size={20} className="rotate-90 text-navy" /><div className="w-12 border-t-2 border-dashed border-navy"></div></div>
-                    <div className="flex-1 text-right min-w-0">
-                      <p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">To</p>
-                      <p className="text-xl font-black text-navy truncate">{booking.details.to}</p>
-                      <p className="text-[10px] font-bold text-navy/40">{booking.details.arrivalTime}</p>
-                    </div>
+                    <div className="flex-1 text-right min-w-0"><p className="text-[9px] font-black text-navy/30 uppercase tracking-wider">To</p><p className="text-xl font-black text-navy truncate">{booking.details.to}</p><p className="text-[10px] font-bold text-navy/40">{booking.details.arrivalTime}</p></div>
                   </div>
                 )}
                 <DetailField label="Airline" value={booking.details.airline} />
@@ -291,9 +280,9 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
               </>
             )}
             {Object.entries(booking.details).map(([key, value]) => {
-              const skip = ['from', 'to', 'gate', 'seat', 'checkIn', 'checkOut', 'address', 'airline', 'flightNo', 'class', 'room', 'vehicle', 'arrivalTime', 'time', 'date'];
+              const skip = ['from', 'to', 'gate', 'seat', 'checkIn', 'checkOut', 'address', 'airline', 'flightNo', 'class', 'room', 'vehicle', 'arrivalTime', 'time', 'date', 'imageUrl', 'linkedScheduleId'];
               if (skip.includes(key)) return null;
-              return <DetailField key={key} label={key} value={value} fullWidth={String(value).length > 20} />;
+              return <DetailField key={key} label={key} value={value as any} fullWidth={String(value).length > 20} />;
             })}
           </div>
           <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-accent/30">
@@ -321,16 +310,13 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
       {isSearchVisible && (
         <div className="animate-in slide-in-from-top-2 fade-in duration-200 -mt-2 mb-4 bg-white p-4 rounded-2xl-sticker border border-accent sticker-shadow">
           <div className="flex items-center gap-2 bg-cream p-3 rounded-xl border border-accent/50 mb-3">
-            <input type="text" placeholder="Search tickets..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 bg-transparent border-none p-0 text-navy font-bold placeholder:text-navy/20 focus:ring-0 text-sm" autoFocus />
+            <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 bg-transparent border-none p-0 text-navy font-bold placeholder:text-navy/20 focus:ring-0 text-sm" autoFocus />
             {searchTerm && <button onClick={() => setSearchTerm('')}><X size={14} className="text-navy/30" /></button>}
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             <button onClick={() => setFilterUser('All')} className={`flex-shrink-0 px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all ${filterUser === 'All' ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy/40'}`}><User size={12} /> <span className="text-[10px] font-black uppercase">All</span></button>
             {members.map(m => (
-              <button key={m.id} onClick={() => setFilterUser(m.id)} className={`flex-shrink-0 pr-3 py-1 rounded-full flex items-center gap-2 border transition-all ${filterUser === m.id ? 'bg-stitch border-stitch text-white pl-1' : 'bg-white border-accent text-navy/40 pl-1'}`}>
-                <img src={m.avatar} className="w-5 h-5 rounded-full" />
-                <span className="text-[10px] font-black uppercase">{m.name}</span>
-              </button>
+              <button key={m.id} onClick={() => setFilterUser(m.id)} className={`flex-shrink-0 pr-3 py-1 rounded-full flex items-center gap-2 border transition-all ${filterUser === m.id ? 'bg-stitch border-stitch text-white pl-1' : 'bg-white border-accent text-navy/40 pl-1'}`}><img src={m.avatar} className="w-5 h-5 rounded-full" /><span className="text-[10px] font-black uppercase">{m.name}</span></button>
             ))}
           </div>
         </div>
@@ -341,12 +327,10 @@ const Bookings: React.FC<BookingsProps> = ({ members, currentUser, onNavigate, h
           const isExpanded = expandedId === booking.id;
           return (
             <div key={booking.id} onClick={() => setExpandedId(isExpanded ? null : booking.id)} 
-              className={`relative w-full rounded-2xl-sticker overflow-hidden border-2 sticker-shadow transition-all duration-500 cursor-pointer ${isExpanded ? 'z-50 my-4 scale-[1.02] shadow-2xl' : 'z-0 -mt-12 hover:-mt-10 hover:z-40'} ${index === 0 && !isExpanded ? 'mt-0' : ''} ${booking.type === 'Flight' ? 'border-navy' : booking.type === 'Amusement' ? 'border-donald' : 'border-accent'}`} 
+              className={`relative w-full rounded-2xl-sticker overflow-hidden border-2 sticker-shadow transition-all duration-500 cursor-pointer ${isExpanded ? 'z-50 my-4 scale-[1.02] shadow-2xl' : 'z-0 -mt-12 hover:-mt-10 hover:z-40 hover:scale-[1.005] hover:shadow-lg'} ${index === 0 && !isExpanded ? 'mt-0' : ''} ${booking.type === 'Flight' ? 'border-navy' : booking.type === 'Amusement' ? 'border-donald' : 'border-accent'}`} 
               style={{ zIndex: isExpanded ? 50 : index }}>
               {renderHeaderStrip(booking, isExpanded, index, filteredBookings.length)}
-              <div className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[1000px]' : 'max-h-0'}`}>
-                {renderBookingDetails(booking)}
-              </div>
+              <div className={`transition-[max-height] duration-500 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[1000px]' : 'max-h-0'}`}>{renderBookingDetails(booking)}</div>
             </div>
           );
         }) : (
@@ -408,11 +392,13 @@ const BookingFormModal: React.FC<{ initialData: Booking | null; members: TripMem
            contents: {
              parts: [
                { inlineData: { mimeType: 'image/jpeg', data: base64Data } },
-               { text: `Analyze this image. Extract details into JSON format. Return ONLY JSON.` }
+               { text: `Analyze this image. Extract details into JSON format. Return ONLY JSON: { type: string, title: string, referenceNo: string, details: object }` }
              ]
            }
         });
-        const extracted = JSON.parse(response.text?.replace(/```json|```/g, '').trim() || '{}');
+        const extractedText = response.text || "{}";
+        const cleanedJson = extractedText.replace(/```json|```/g, '').trim();
+        const extracted = JSON.parse(cleanedJson);
         if (extracted) { setFormData(prev => ({ ...prev, ...extracted })); }
       } catch (error) { console.error("Scan failed", error); } finally { setIsScanning(false); }
     }
@@ -432,10 +418,7 @@ const BookingFormModal: React.FC<{ initialData: Booking | null; members: TripMem
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-20">
         <div className="w-full aspect-[21/9] bg-white rounded-2xl-sticker border-2 border-dashed border-accent flex flex-col items-center justify-center relative overflow-hidden cursor-pointer" onClick={() => document.getElementById('imageInput')?.click()}>
           {imagePreview ? (
-            <div className="relative w-full h-full">
-              <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-              {isScanning && <div className="absolute inset-0 bg-navy/60 backdrop-blur-sm flex items-center justify-center text-white"><Wand2 className="animate-pulse" /></div>}
-            </div>
+            <div className="relative w-full h-full"><img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />{isScanning && <div className="absolute inset-0 bg-navy/60 backdrop-blur-sm flex items-center justify-center text-white"><Wand2 className="animate-pulse" /></div>}</div>
           ) : (
             <div className="flex flex-col items-center text-navy/20"><Camera size={40} /><p className="text-[10px] font-black uppercase">Snap Ticket</p></div>
           )}
@@ -444,12 +427,23 @@ const BookingFormModal: React.FC<{ initialData: Booking | null; members: TripMem
         <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow">
           <label className="text-[10px] font-black uppercase text-navy/40 mb-3 block">Category</label>
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {types.map(t => <button key={t} onClick={() => setFormData({ ...formData, type: t })} className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] font-black uppercase transition-all ${formData.type === t ? 'bg-navy text-white' : 'bg-accent/20'}`}>{t}</button>)}
+            {types.map(t => (
+              <button key={t} onClick={() => setFormData({ ...formData, type: t })} className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] font-black uppercase transition-all ${formData.type === t ? 'bg-navy text-white' : 'bg-accent/20'}`}>{t}</button>
+            ))}
           </div>
         </div>
         <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow space-y-4">
           <div><label className="text-[10px] font-black uppercase text-navy/40 mb-1 block">Title</label><input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} placeholder="e.g. Disney Ticket" className="w-full text-xl font-black text-navy bg-transparent border-none p-0 focus:ring-0" /></div>
           <div><label className="text-[10px] font-black uppercase text-navy/40 mb-1 block">Ref No</label><input type="text" value={formData.referenceNo} onChange={e => setFormData({ ...formData, referenceNo: e.target.value.toUpperCase() })} placeholder="e.g. M7X9L2" className="w-full font-black text-navy bg-transparent border-none p-0 focus:ring-0 uppercase" /></div>
+        </div>
+        <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow space-y-4">
+          <div>
+            <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block flex items-center gap-1"><Link size={12} /> Link to Schedule</label>
+            <select value={formData.linkedScheduleId || ''} onChange={e => setFormData({ ...formData, linkedScheduleId: e.target.value })} className="w-full bg-cream border border-accent rounded-xl p-3 font-bold text-navy text-sm outline-none">
+              <option value="">-- No Link --</option>
+              {itinerary.map(item => <option key={item.id} value={item.id}>{item.dayIndex === -1 ? '(Pool)' : `Day ${item.dayIndex + 1}`} - {item.time} {item.location}</option>)}
+            </select>
+          </div>
         </div>
       </div>
     </div>

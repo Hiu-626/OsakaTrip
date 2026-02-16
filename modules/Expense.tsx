@@ -6,18 +6,12 @@ import {
   Trash2, 
   Edit2, 
   X, 
-  Check, 
   RefreshCw, 
   Settings2, 
   ArrowRight,
   Wallet,
   ChevronDown,
-  Calendar,
-  Tag,
-  PieChart,
-  Search,
-  BarChart3,
-  FilterX
+  Search
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { COLORS } from '../constants.ts';
@@ -68,7 +62,13 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   };
 
   const todayDate = new Date().toISOString().split('T')[0];
-  const { todayStats, totalSpentDisplay, breakdownStats } = useMemo(() => {
+  
+  // Fix: Explicitly type useMemo return to avoid 'unknown' inference for breakdownStats and resolve map() error.
+  const { todayStats, totalSpentDisplay, breakdownStats } = useMemo<{
+    todayStats: { count: number; total: number };
+    totalSpentDisplay: number;
+    breakdownStats: any[];
+  }>(() => {
     const todayExpenses = expenses.filter(e => e.date === todayDate);
     const todayTotalJPY = todayExpenses.reduce((sum, e) => sum + (e.amount * (rates[e.currency] || 1)), 0);
     const totalJPY = expenses.reduce((sum, e) => sum + (e.amount * (rates[e.currency] || 1)), 0);
@@ -113,7 +113,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const currencies = activeCurrencies.filter(c => c !== 'JPY').join(', ');
-      const response = await ai.models.generateContent({ model: "gemini-3-flash-preview", contents: `Rates for 1 unit of [${currencies}] to JPY. Return JSON like {"HKD": 19.5}.`, config: { responseMimeType: "application/json" } });
+      const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: `Rates for 1 unit of [${currencies}] to JPY. Return JSON like {"HKD": 19.5}.`, config: { responseMimeType: "application/json" } });
       const data = JSON.parse(response.text || "{}");
       setRates(prev => ({ ...prev, ...data, JPY: 1 }));
     } catch (e) { console.error(e); }
@@ -132,7 +132,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         </div>
       </div>
       {isSearchVisible && <div className="slide-down"><div className="bg-white p-3 rounded-2xl border border-stitch/30 flex items-center gap-2"><Search size={16} className="text-stitch ml-1" /><input autoFocus value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className="flex-1 bg-transparent border-none text-sm font-bold text-navy" /></div></div>}
-      <div className="bg-white p-5 rounded-2xl-sticker sticker-shadow border border-accent/40"><div className="flex gap-4 mb-4"><button onClick={() => setBreakdownMode('category')} className={`text-[10px] font-black uppercase tracking-[0.2em] ${breakdownMode === 'category' ? 'text-stitch' : 'text-navy/20'}`}>Category</button><button onClick={() => setBreakdownMode('daily')} className={`text-[10px] font-black uppercase tracking-[0.2em] ${breakdownMode === 'daily' ? 'text-stitch' : 'text-navy/20'}`}>Daily</button></div><div className="space-y-4">{breakdownStats.map((stat) => <div key={stat.name} className="relative group"><div className="flex justify-between items-end mb-1 z-10 relative"><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch }} /><span className="text-xs font-black">{stat.name}</span></div><span className="text-xs font-black">{Math.round(stat.percent)}%</span></div><div className="w-full h-2.5 bg-cream rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${stat.percent}%`, backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch }} /></div></div>)}</div></div>
+      <div className="bg-white p-5 rounded-2xl-sticker sticker-shadow border border-accent/40"><div className="flex gap-4 mb-4"><button onClick={() => setBreakdownMode('category')} className={`text-[10px] font-black uppercase tracking-[0.2em] ${breakdownMode === 'category' ? 'text-stitch' : 'text-navy/20'}`}>Category</button><button onClick={() => setBreakdownMode('daily')} className={`text-[10px] font-black uppercase tracking-[0.2em] ${breakdownMode === 'daily' ? 'text-stitch' : 'text-navy/20'}`}>Daily</button></div><div className="space-y-4">{breakdownStats.map((stat: any) => <div key={stat.name} className="relative group"><div className="flex justify-between items-end mb-1 z-10 relative"><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch }} /><span className="text-xs font-black">{stat.name}</span></div><span className="text-xs font-black">{Math.round(stat.percent)}%</span></div><div className="w-full h-2.5 bg-cream rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{ width: `${stat.percent}%`, backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch }} /></div></div>)}</div></div>
       <div className="space-y-6 pt-2" ref={logRef}><div className="flex justify-between items-center px-1"><h3 className="text-[11px] font-black text-navy/20 uppercase tracking-[0.3em]">Log</h3>{selectedFilterDate && <button onClick={() => setSelectedFilterDate(null)} className="text-[9px] font-black text-stitch uppercase">Clear</button>}</div>{Object.entries(groupedExpenses).map(([date, dateExpenses]) => <div key={date} className="space-y-3"><div className="flex items-center gap-3 px-1"><span className="text-[10px] font-black text-navy/40 uppercase tracking-widest">{date}</span><div className="h-px flex-1 bg-accent/30" /></div>{dateExpenses.map(exp => { const isExpanded = expandedId === exp.id; return <div key={exp.id} onClick={() => setExpandedId(isExpanded ? null : exp.id)} className={`relative rounded-2xl-sticker border transition-all cursor-pointer ${isExpanded ? 'bg-white border-stitch shadow-lg' : 'bg-white border-accent/40 sticker-shadow'}`}><div className="p-4 flex items-center gap-4"><div className="w-10 h-10 rounded-full flex items-center justify-center text-lg bg-cream">{exp.category === 'Food' ? '🍜' : exp.category === 'Transport' ? '🚕' : '💸'}</div><div className="flex-1 truncate"><h4 className="font-black text-sm truncate">{exp.title}</h4></div><div className="text-right"><p className="font-black text-sm text-navy">{exp.currency} {exp.amount}</p></div></div>{isExpanded && <div className="p-4 pt-0 border-t border-stitch/10"><div className="flex justify-end gap-2 mt-3"><button onClick={(e) => { e.stopPropagation(); setEditingExpense(exp); setIsModalOpen(true); }} className="p-2 text-stitch text-[10px] font-black">EDIT</button><button onClick={(e) => { e.stopPropagation(); setExpenses(expenses.filter(i => i.id !== exp.id)); }} className="p-2 text-red-400 text-[10px] font-black">DELETE</button></div></div>}</div>; })}</div>)}</div>
       {isModalOpen && <ExpenseModal expense={editingExpense} members={members} currencies={activeCurrencies} onClose={() => setIsModalOpen(false)} onSave={(e) => { if (editingExpense) setExpenses(expenses.map(ex => ex.id === e.id ? e : ex)); else setExpenses([{ ...e, id: Date.now().toString() }, ...expenses]); setIsModalOpen(false); }} />}
       {isSettingsOpen && <div className="fixed inset-0 z-[100] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}><div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-10" onClick={e => e.stopPropagation()}><div className="flex justify-between items-center mb-6"><h3 className="text-lg font-black text-navy uppercase">Settings</h3><button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream rounded-full"><X size={20} /></button></div><div className="mb-6"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Display Currency</label><div className="flex gap-2 overflow-x-auto pb-2">{activeCurrencies.map(cur => <button key={cur} onClick={() => setDisplayCurrency(cur)} className={`px-4 py-2 rounded-xl border-2 font-black text-xs ${displayCurrency === cur ? 'bg-navy border-navy text-white' : 'bg-white border-accent'}`}>{cur}</button>)}</div></div><button onClick={fetchRates} disabled={loadingRates} className="w-full py-4 bg-navy text-white font-black rounded-2xl uppercase text-xs tracking-widest flex items-center justify-center gap-2"><RefreshCw size={16} className={loadingRates ? 'animate-spin' : ''} /> SYNC RATES</button></div></div>}
@@ -142,12 +142,45 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
 };
 
 const SettlementModal: React.FC<{ balances: Record<string, number>, displayCurrency: string, convert: any, members: TripMember[], onClose: () => void }> = ({ balances, displayCurrency, convert, members, onClose }) => {
-   const suggestions = useMemo(() => { const people = Object.entries(balances).map(([id, amount]) => ({ id, amount: amount as number })); const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount); const creditors = people.filter(p => p.amount > 1).sort((a, b) => b.amount - a.amount); const tx: any[] = []; let i = 0, j = 0; while (i < debtors.length && j < creditors.length) { const amount = Math.min(Math.abs(debtors[i].amount), creditors[j].amount); tx.push({ from: debtors[i].id, to: creditors[j].id, amount }); debtors[i].amount += amount; creditors[j].amount -= amount; if (Math.abs(debtors[i].amount) < 1) i++; if (creditors[j].amount < 1) j++; } return tx; }, [balances]);
-   return (<div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={onClose}><div className="bg-paper w-full max-w-sm rounded-3xl p-6 border-4 border-stitch/30" onClick={e => e.stopPropagation()}><h3 className="text-lg font-black text-navy uppercase tracking-widest mb-6">Settlement</h3><div className="space-y-3 max-h-[60vh] overflow-y-auto">{suggestions.map((t, idx) => <div key={idx} className="bg-white p-4 rounded-2xl border border-accent flex items-center justify-between"><div className="flex items-center gap-2"><img src={members.find(m => m.id === t.from)?.avatar} className="w-6 h-6 rounded-full" /><ArrowRight size={14} className="text-navy/20" /><img src={members.find(m => m.id === t.to)?.avatar} className="w-6 h-6 rounded-full" /></div><p className="font-black text-navy text-sm">{displayCurrency} {Math.round(convert(t.amount, 'JPY', displayCurrency)).toLocaleString()}</p></div>)}</div></div></div>);
+   // Fix: Explicitly type suggestions as any[] to avoid 'unknown' inference and fix map() error.
+   const suggestions = useMemo<any[]>(() => { 
+     const people = Object.entries(balances).map(([id, amount]) => ({ id, amount: amount as number })); 
+     const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount); 
+     const creditors = people.filter(p => p.amount > 1).sort((a, b) => b.amount - a.amount); 
+     const tx: any[] = []; 
+     let i = 0, j = 0; 
+     while (i < debtors.length && j < creditors.length) { 
+       const amount = Math.min(Math.abs(debtors[i].amount), creditors[j].amount); 
+       tx.push({ from: debtors[i].id, to: creditors[j].id, amount }); 
+       debtors[i].amount += amount; 
+       creditors[j].amount -= amount; 
+       if (Math.abs(debtors[i].amount) < 1) i++; 
+       if (creditors[j].amount < 1) j++; 
+     } 
+     return tx; 
+   }, [balances]);
+
+   return (
+     <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={onClose}>
+       <div className="bg-paper w-full max-sm rounded-3xl p-6 border-4 border-stitch/30" onClick={e => e.stopPropagation()}>
+         <h3 className="text-lg font-black text-navy uppercase tracking-widest mb-6">Settlement</h3>
+         <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+           {suggestions.map((t, idx) => (
+             <div key={idx} className="bg-white p-4 rounded-2xl border border-accent flex items-center justify-between">
+               <div className="flex items-center gap-2">
+                 <img src={members.find(m => m.id === t.from)?.avatar} className="w-6 h-6 rounded-full" />
+                 <ArrowRight size={14} className="text-navy/20" />
+                 <img src={members.find(m => m.id === t.to)?.avatar} className="w-6 h-6 rounded-full" />
+               </div>
+               <p className="font-black text-navy text-sm">{displayCurrency} {Math.round(convert(t.amount, 'JPY', displayCurrency)).toLocaleString()}</p>
+             </div>
+           ))}
+         </div>
+       </div>
+     </div>
+   );
 };
 
-// Fix for Error in file modules/Expense.tsx on line 149: 
-// The ExpenseModal component was truncated. Completing it now.
 const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[]; currencies: string[]; onClose: () => void; onSave: (e: ExpenseType) => void }> = ({ expense, members, currencies, onClose, onSave }) => {
   const [formData, setFormData] = useState<Partial<ExpenseType>>(expense || { 
     amount: 0, 
@@ -163,7 +196,7 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
 
   return (
     <div className="fixed inset-0 z-[110] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-paper w-full max-w-md rounded-t-3xl p-6 sticker-shadow border-t-4 border-stitch animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
+      <div className="bg-paper w-full max-md rounded-t-3xl p-6 sticker-shadow border-t-4 border-stitch animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-black text-navy uppercase">{expense ? 'Edit Record' : 'New Record'}</h3>
           <button onClick={onClose} className="p-2 bg-cream rounded-full"><X size={20} /></button>
@@ -189,5 +222,4 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
   );
 };
 
-// Fix: Add default export to resolve the error in App.tsx line 13
 export default Expense;

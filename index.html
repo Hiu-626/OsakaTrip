@@ -21,7 +21,20 @@
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
   
   <script>
-    window.process = { env: { NODE_ENV: 'production' } };
+    // Polyfill process for browser environment
+    window.process = { 
+      env: { 
+        NODE_ENV: 'production',
+        API_KEY: 'AIzaSyA4nwqvMZEnZfpowZZcpGeurMmO6jMZ-J0',
+        VITE_FIREBASE_API_KEY: '',
+        VITE_FIREBASE_AUTH_DOMAIN: '',
+        VITE_FIREBASE_PROJECT_ID: '',
+        VITE_FIREBASE_STORAGE_BUCKET: '',
+        VITE_FIREBASE_MESSAGING_SENDER_ID: '',
+        VITE_FIREBASE_APP_ID: ''
+      } 
+    };
+    
     tailwind.config = {
       theme: {
         extend: {
@@ -68,10 +81,13 @@
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
     "lucide-react": "https://esm.sh/lucide-react@0.475.0?external=react",
     "@google/genai": "https://esm.sh/@google/genai@0.2.1",
+    "firebase/app": "https://esm.sh/firebase@11.3.1/app",
+    "firebase/auth": "https://esm.sh/firebase@11.3.1/auth",
+    "firebase/firestore": "https://esm.sh/firebase@11.3.1/firestore",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
-    "vite": "https://esm.sh/vite@^7.3.1",
     "firebase/": "https://esm.sh/firebase@^12.9.0/",
+    "vite": "https://esm.sh/vite@^7.3.1",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4"
   }
 }
