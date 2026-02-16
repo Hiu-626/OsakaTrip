@@ -3,7 +3,7 @@
   "name": "Ohana Trip Osaka",
   "short_name": "OhanaOsaka",
   "description": "Stitch & Donald themed Osaka Trip Planner",
-  "start_url": "./",
+  "start_url": "index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#F8F9F5",
