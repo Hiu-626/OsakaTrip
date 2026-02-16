@@ -6,14 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Ohana Osaka">
+  <meta name="apple-mobile-web-app-title" content="Ohana Trip">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#1F3C88">
   
-  <!-- PWA Manifest -->
   <link rel="manifest" href="manifest.json">
-  
-  <!-- Apple Touch Icons -->
   <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/stitch.png">
   <link rel="icon" type="image/png" href="https://img.icons8.com/color/48/stitch.png">
   
@@ -24,13 +21,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
   
   <script>
-    // 注入 process.env 存根
-    window.process = {
-      env: {
-        NODE_ENV: 'production'
-      }
-    };
-    
+    window.process = { env: { NODE_ENV: 'production' } };
     tailwind.config = {
       theme: {
         extend: {
@@ -42,9 +33,7 @@
             paper: '#FFFFFF',
             accent: '#E0E5D5'
           },
-          fontFamily: {
-            sans: ['Quicksand', 'sans-serif'],
-          },
+          fontFamily: { sans: ['Quicksand', 'sans-serif'] },
           borderRadius: {
             'xl-sticker': '1.25rem',
             '2xl-sticker': '1.5rem',
@@ -55,48 +44,30 @@
     }
   </script>
   <style>
-    :root {
-      --sat: env(safe-area-inset-top);
-      --sab: env(safe-area-inset-bottom);
-    }
+    :root { --sat: env(safe-area-inset-top); --sab: env(safe-area-inset-bottom); }
     body {
       background-color: #F8F9F5;
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior-y: contain;
-      user-select: none;
       padding-top: var(--sat);
       padding-bottom: var(--sab);
     }
-    .sticker-shadow {
-      box-shadow: 4px 4px 0px #E0E5D5;
-    }
-    ::-webkit-scrollbar {
-      display: none;
-    }
-    input, textarea {
-      user-select: text;
-    }
-    .animate-in {
-      animation: fadeIn 0.3s ease-out forwards;
-    }
+    .sticker-shadow { box-shadow: 4px 4px 0px #E0E5D5; }
+    ::-webkit-scrollbar { display: none; }
+    .animate-in { animation: fadeIn 0.3s ease-out forwards; }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
   </style>
-<script type="importmap">
+  <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@19.0.0",
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
     "lucide-react": "https://esm.sh/lucide-react@0.475.0?external=react",
-    "firebase/app": "https://esm.sh/firebase@11.3.1/app",
-    "firebase/auth": "https://esm.sh/firebase@11.3.1/auth",
-    "firebase/firestore": "https://esm.sh/firebase@11.3.1/firestore",
     "@google/genai": "https://esm.sh/@google/genai@0.2.1",
-    "jspdf": "https://esm.sh/jspdf@2.5.2",
-    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
     "vite": "https://esm.sh/vite@^7.3.1",
