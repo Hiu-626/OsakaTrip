@@ -6,12 +6,12 @@ import {
   Wallet, 
   CheckSquare, 
 } from 'lucide-react';
-import { MOCK_MEMBERS, MOCK_TRIP_CONFIG } from './constants';
-import { TripMember } from './types';
-import Schedule from './modules/Schedule';
-import Bookings from './modules/Bookings';
-import Expense from './modules/Expense';
-import Planning from './modules/Planning';
+import { MOCK_MEMBERS, MOCK_TRIP_CONFIG } from './constants.ts';
+import { TripMember } from './types.ts';
+import Schedule from './modules/Schedule.tsx';
+import Bookings from './modules/Bookings.tsx';
+import Expense from './modules/Expense.tsx';
+import Planning from './modules/Planning.tsx';
 
 type Tab = 'schedule' | 'bookings' | 'expense' | 'planning';
 

@@ -28,8 +28,8 @@ import {
   Camera,
   RotateCcw
 } from 'lucide-react';
-import { TripConfig, ScheduleItem, Category, TripMember, Booking } from '../types';
-import { COLORS } from '../constants';
+import { TripConfig, ScheduleItem, Category, TripMember, Booking } from '../types.ts';
+import { COLORS } from '../constants.ts';
 
 interface ScheduleProps {
   config: TripConfig;
@@ -73,39 +73,29 @@ const Schedule: React.FC<ScheduleProps> = ({
     ];
   });
 
-  // State to hold bookings for linking
   const [bookings, setBookings] = useState<Booking[]>([]);
-
   const [selectedDay, setSelectedDay] = useState(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
   const [addItemTarget, setAddItemTarget] = useState<'schedule' | 'pool'>('schedule');
-  
-  // New state for "Move to Day" modal
   const [movingItem, setMovingItem] = useState<ScheduleItem | null>(null);
-
-  // Add/Edit Member States
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberAvatarType, setNewMemberAvatarType] = useState<'emoji' | 'upload' | 'random'>('emoji');
   const [newMemberEmoji, setNewMemberEmoji] = useState('😎');
   const [uploadedAvatar, setUploadedAvatar] = useState('');
-
   const [draggedData, setDraggedData] = useState<{ item: ScheduleItem, source: 'pool' | 'schedule' } | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [isPoolDragOver, setIsPoolDragOver] = useState(false);
   const [swipeId, setSwipeId] = useState<string | null>(null);
-  
-  // Ref for file import
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { localStorage.setItem('tripConfig', JSON.stringify(config)); }, [config]);
   useEffect(() => { localStorage.setItem('itinerary', JSON.stringify(itinerary)); }, [itinerary]);
   useEffect(() => { localStorage.setItem('inspiration_pool', JSON.stringify(pool)); }, [pool]);
 
-  // Load bookings to check for links
   useEffect(() => {
     const savedBookings = localStorage.getItem('bookings');
     if (savedBookings) {
@@ -136,19 +126,17 @@ const Schedule: React.FC<ScheduleProps> = ({
     itinerary.filter(item => item.dayIndex === selectedDay).sort((a, b) => a.time.localeCompare(b.time)),
   [itinerary, selectedDay]);
 
-  // Calculations for Duration
   const getDurationString = (start: string, end?: string) => {
     if (!end || end === '--:--') return '';
     const [h1, m1] = start.split(':').map(Number);
     const [h2, m2] = end.split(':').map(Number);
     let diffMins = (h2 * 60 + m2) - (h1 * 60 + m1);
-    if (diffMins < 0) diffMins += 24 * 60; // Handle over midnight simple case
+    if (diffMins < 0) diffMins += 24 * 60;
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
     return `${hours > 0 ? `${hours}h ` : ''}${mins > 0 ? `${mins}m` : ''}`.trim();
   };
 
-  // Drag & Drop
   const handleDragStart = (e: React.DragEvent, item: ScheduleItem, source: 'pool' | 'schedule') => {
     setDraggedData({ item, source });
     e.dataTransfer.effectAllowed = 'move';
@@ -190,7 +178,6 @@ const Schedule: React.FC<ScheduleProps> = ({
     setItinerary([...otherDaysItems, ...currentItems]);
   };
 
-  // CRUD & Move
   const deleteItem = (id: string, from: 'pool' | 'schedule') => {
     if (from === 'pool') setPool(pool.filter(i => i.id !== id));
     else setItinerary(itinerary.filter(i => i.id !== id));
@@ -198,13 +185,11 @@ const Schedule: React.FC<ScheduleProps> = ({
   };
 
   const moveItemToDay = (item: ScheduleItem, targetDayIndex: number) => {
-    // Remove from current list
     if (item.dayIndex === -1) {
        setPool(pool.filter(i => i.id !== item.id));
     } else {
        setItinerary(itinerary.filter(i => i.id !== item.id));
     }
-    // Add to new day
     const updatedItem = { ...item, dayIndex: targetDayIndex };
     setItinerary(prev => [...prev, updatedItem]);
     setMovingItem(null);
@@ -228,7 +213,6 @@ const Schedule: React.FC<ScheduleProps> = ({
   };
 
   const handlePoolItemClick = (item: ScheduleItem) => {
-    // Direct click on Pool Item opens the "Move To Day" modal
     setMovingItem(item);
   };
 
@@ -245,13 +229,10 @@ const Schedule: React.FC<ScheduleProps> = ({
       else setItinerary([...itinerary, newItem]);
     } else if (editingItem) {
       const updatedItem = { ...editingItem, ...itemData, dayIndex: targetDayIndex };
-      
       const oldDayIndex = editingItem.dayIndex;
-      
       if (oldDayIndex !== targetDayIndex) {
          if (oldDayIndex === -1) setPool(prev => prev.filter(i => i.id !== editingItem.id));
          else setItinerary(prev => prev.filter(i => i.id !== editingItem.id));
-         
          if (targetDayIndex === -1) setPool(prev => [...prev, updatedItem]);
          else setItinerary(prev => [...prev, updatedItem]);
       } else {
@@ -272,15 +253,12 @@ const Schedule: React.FC<ScheduleProps> = ({
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          const size = 200; // Resize to 200x200 for avatar
+          const size = 200;
           canvas.width = size;
           canvas.height = size;
-          
-          // Center crop calculation
           const ratio = Math.max(size / img.width, size / img.height);
           const centerShift_x = (size - img.width * ratio) / 2;
           const centerShift_y = (size - img.height * ratio) / 2;
-          
           ctx?.drawImage(img, 0, 0, img.width, img.height, centerShift_x, centerShift_y, img.width * ratio, img.height * ratio);
           setUploadedAvatar(canvas.toDataURL('image/jpeg', 0.8));
         };
@@ -289,19 +267,17 @@ const Schedule: React.FC<ScheduleProps> = ({
     }
   };
 
-  // Member Management Functions
   const startEditingMember = (member: TripMember) => {
     setEditingMemberId(member.id);
     setNewMemberName(member.name);
-    // Rough logic to detect avatar type
     if (member.avatar.startsWith('data:image/svg')) {
       setNewMemberAvatarType('emoji');
-      setNewMemberEmoji('😎'); // Default or extract if possible
+      setNewMemberEmoji('😎');
     } else if (member.avatar.startsWith('data:image')) {
       setNewMemberAvatarType('upload');
       setUploadedAvatar(member.avatar);
     } else {
-      setNewMemberAvatarType('random'); // Treat external URLs as 'random' presets for simplicity
+      setNewMemberAvatarType('random');
     }
   };
 
@@ -321,7 +297,6 @@ const Schedule: React.FC<ScheduleProps> = ({
       } else if (newMemberAvatarType === 'upload' && uploadedAvatar) {
          avatarUrl = uploadedAvatar;
       } else if (newMemberAvatarType === 'random') {
-         // Keep existing if editing and type matches, otherwise gen new
          if (editingMemberId) {
             const existing = members.find(m => m.id === editingMemberId);
             if (existing && !existing.avatar.startsWith('data:')) {
@@ -335,14 +310,8 @@ const Schedule: React.FC<ScheduleProps> = ({
             avatarUrl = `https://picsum.photos/seed/${newMemberName}${randomId}/200`;
          }
       }
-      
-      if (editingMemberId) {
-        onUpdateMember(editingMemberId, newMemberName.trim(), avatarUrl);
-      } else {
-        onAddMember(newMemberName.trim(), avatarUrl);
-      }
-
-      // Reset
+      if (editingMemberId) onUpdateMember(editingMemberId, newMemberName.trim(), avatarUrl);
+      else onAddMember(newMemberName.trim(), avatarUrl);
       cancelEditingMember();
     }
   };
@@ -353,7 +322,6 @@ const Schedule: React.FC<ScheduleProps> = ({
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
   };
 
-  // Export Data Logic
   const handleExportData = () => {
     const backupData = {
       tripConfig: localStorage.getItem('tripConfig'),
@@ -367,7 +335,6 @@ const Schedule: React.FC<ScheduleProps> = ({
       baseCurrency: localStorage.getItem('baseCurrency'),
       timestamp: new Date().toISOString()
     };
-
     const blob = new Blob([JSON.stringify(backupData)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -382,14 +349,11 @@ const Schedule: React.FC<ScheduleProps> = ({
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (window.confirm('⚠️ 警告：匯入行程檔案將會「完全覆蓋」目前所有的行程、記帳與票券資料。\n\n確定要載入備份檔案嗎？')) {
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
-          const rawResult = event.target?.result as string;
-          const data = JSON.parse(rawResult);
-
+          const data = JSON.parse(event.target?.result as string);
           if (data.tripConfig) localStorage.setItem('tripConfig', data.tripConfig);
           if (data.itinerary) localStorage.setItem('itinerary', data.itinerary);
           if (data.inspiration_pool) localStorage.setItem('inspiration_pool', data.inspiration_pool);
@@ -399,23 +363,19 @@ const Schedule: React.FC<ScheduleProps> = ({
           if (data.journal_posts) localStorage.setItem('journal_posts', data.journal_posts);
           if (data.planning_items) localStorage.setItem('planning_items', data.planning_items);
           if (data.baseCurrency) localStorage.setItem('baseCurrency', data.baseCurrency);
-
           alert('✅ 匯入成功！App 將重新啟動以載入新行程。');
           window.location.reload();
         } catch (error) {
-          console.error('Import failed', error);
           alert('❌ 匯入失敗：檔案格式錯誤或損毀。');
         }
       };
       reader.readAsText(file);
     }
-    
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
     <div className="space-y-6 pb-24 animate-in fade-in duration-500">
-      {/* Countdown Card */}
       <div className="bg-stitch text-white p-6 rounded-2xl-sticker sticker-shadow flex justify-between items-center relative overflow-hidden border-2 border-white/20">
         <div className="z-10">
           <p className="text-[10px] font-black opacity-70 uppercase tracking-[0.3em] mb-1">Adventure Starts In</p>
@@ -424,7 +384,6 @@ const Schedule: React.FC<ScheduleProps> = ({
         <div className="text-6xl opacity-20 absolute -right-2 -bottom-2 transform rotate-12 z-0">🏝️</div>
       </div>
 
-      {/* Inspiration Pool Area */}
       <div 
         className={`transition-all duration-300 ${isPoolDragOver ? 'scale-[1.02]' : ''}`}
         onDragOver={(e) => { e.preventDefault(); setIsPoolDragOver(true); }}
@@ -443,26 +402,19 @@ const Schedule: React.FC<ScheduleProps> = ({
              + IDEA
            </button>
         </div>
-        
-        <div className={`
-           min-h-[110px] p-4 rounded-2xl-sticker border-2 border-dashed flex gap-3 overflow-x-auto snap-x scrollbar-hide items-center
-           ${isPoolDragOver ? 'bg-stitch/10 border-stitch' : 'bg-white border-accent'}
-        `}>
+        <div className={`min-h-[110px] p-4 rounded-2xl-sticker border-2 border-dashed flex gap-3 overflow-x-auto snap-x scrollbar-hide items-center ${isPoolDragOver ? 'bg-stitch/10 border-stitch' : 'bg-white border-accent'}`}>
           {pool.length > 0 ? pool.map((item) => (
             <div 
               key={item.id}
               draggable
               onDragStart={(e) => handleDragStart(e, item, 'pool')}
               onDragEnd={handleDragEnd}
-              onClick={() => handlePoolItemClick(item)} // Single click -> Move to Day Modal
+              onClick={() => handlePoolItemClick(item)}
               className="flex-shrink-0 w-44 snap-center cursor-pointer active:cursor-grabbing group"
             >
               <div className="bg-paper p-3 rounded-xl-sticker sticker-shadow border border-accent relative hover:-translate-y-1 transition-transform duration-300 active:scale-105 active:shadow-xl h-full">
                  <div className="flex justify-between items-start mb-2 relative z-10">
-                    <span 
-                      className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider text-white"
-                      style={{ backgroundColor: COLORS[item.category.toLowerCase() as keyof typeof COLORS] || COLORS.stitch }}
-                    >
+                    <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider text-white" style={{ backgroundColor: COLORS[item.category.toLowerCase() as keyof typeof COLORS] || COLORS.stitch }}>
                       {item.category}
                     </span>
                     <div className="flex items-center gap-1">
@@ -473,9 +425,7 @@ const Schedule: React.FC<ScheduleProps> = ({
                  <h4 className="font-black text-navy text-sm leading-tight mb-1 truncate">{item.location}</h4>
                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-accent/30">
                     <p className="text-[9px] font-bold text-navy/30 truncate flex-1">{item.notes || 'Tap to assign day'}</p>
-                    <div className="p-1 bg-stitch/10 text-stitch rounded-full animate-pulse">
-                       <ArrowRight size={12} />
-                    </div>
+                    <div className="p-1 bg-stitch/10 text-stitch rounded-full animate-pulse"><ArrowRight size={12} /></div>
                  </div>
               </div>
             </div>
@@ -488,7 +438,6 @@ const Schedule: React.FC<ScheduleProps> = ({
         </div>
       </div>
 
-      {/* Date Picker */}
       <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide snap-x -mx-4 px-4">
         {days.map((day) => (
           <button
@@ -508,108 +457,40 @@ const Schedule: React.FC<ScheduleProps> = ({
         ))}
       </div>
 
-      {/* Itinerary List */}
-      <div 
-        className="space-y-4 min-h-[300px]"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { if (e.target === e.currentTarget) handleDropOnScheduleList(-1); }}
-      >
+      <div className="space-y-4 min-h-[300px]" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { if (e.target === e.currentTarget) handleDropOnScheduleList(-1); }}>
         {currentDayItems.length > 0 ? currentDayItems.map((item, idx) => {
           const linkedBooking = bookings.find(b => b.linkedScheduleId === item.id);
           const durationStr = getDurationString(item.time, item.endTime);
-
           return (
-            <div 
-              key={item.id} 
-              className="relative group transition-all"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.stopPropagation(); handleDropOnScheduleList(idx); }}
-            >
-              <div 
-                className="flex items-start gap-3 relative"
-                draggable
-                onDragStart={(e) => handleDragStart(e, item, 'schedule')}
-                onDragEnd={handleDragEnd}
-                onClick={(e) => openEditModal(e, item, 'schedule')}
-              >
-                <div className="mt-8 text-navy/10 cursor-grab active:cursor-grabbing group-hover:text-navy/30 transition-colors hidden md:block">
-                  <GripVertical size={20} />
-                </div>
-
+            <div key={item.id} className="relative group transition-all" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.stopPropagation(); handleDropOnScheduleList(idx); }}>
+              <div className="flex items-start gap-3 relative" draggable onDragStart={(e) => handleDragStart(e, item, 'schedule')} onDragEnd={handleDragEnd} onClick={(e) => openEditModal(e, item, 'schedule')}>
+                <div className="mt-8 text-navy/10 cursor-grab active:cursor-grabbing group-hover:text-navy/30 transition-colors hidden md:block"><GripVertical size={20} /></div>
                 <div className="flex-1 relative overflow-hidden rounded-xl-sticker cursor-pointer">
-                  {/* Delete Action Background */}
                   <div className={`absolute inset-0 bg-red-500 flex items-center px-6 transition-opacity ${swipeId === item.id ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                    <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id, 'schedule'); }} className="text-white flex items-center gap-2 font-black">
-                      <Trash2 size={20} /> DELETE
-                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteItem(item.id, 'schedule'); }} className="text-white flex items-center gap-2 font-black"><Trash2 size={20} /> DELETE</button>
                   </div>
-
-                  {/* Card Content */}
                   <div className={`bg-paper p-5 rounded-xl-sticker sticker-shadow border border-accent transition-all duration-300 active:scale-[1.02] hover:border-stitch/50 ${swipeId === item.id ? 'translate-x-32' : 'translate-x-0'}`}>
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex items-center gap-3">
-                        <span 
-                          className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider text-white shadow-sm" 
-                          style={{ backgroundColor: COLORS[item.category.toLowerCase() as keyof typeof COLORS] || COLORS.stitch }}
-                        >
-                          {item.category}
-                        </span>
-                        {durationStr && (
-                          <div className="flex items-center gap-1 text-[9px] font-bold text-navy/40 bg-accent/20 px-2 py-1 rounded-full">
-                            <Clock size={10} />
-                            {durationStr}
-                          </div>
-                        )}
+                        <span className="px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider text-white shadow-sm" style={{ backgroundColor: COLORS[item.category.toLowerCase() as keyof typeof COLORS] || COLORS.stitch }}>{item.category}</span>
+                        {durationStr && <div className="flex items-center gap-1 text-[9px] font-bold text-navy/40 bg-accent/20 px-2 py-1 rounded-full"><Clock size={10} />{durationStr}</div>}
                       </div>
                       <div className="flex items-center gap-2">
-                         <button 
-                           onClick={(e) => { e.stopPropagation(); setMovingItem(item); }}
-                           className="p-2 bg-cream text-navy/30 rounded-full hover:bg-stitch hover:text-white transition-colors"
-                         >
-                            <CalendarDays size={16} />
-                         </button>
-                         <button 
-                           onClick={(e) => { e.stopPropagation(); setSwipeId(swipeId === item.id ? null : item.id); }} 
-                           className="text-navy/20 active:scale-125 transition-transform"
-                         >
-                            <MoreHorizontal size={20} />
-                         </button>
+                         <button onClick={(e) => { e.stopPropagation(); setMovingItem(item); }} className="p-2 bg-cream text-navy/30 rounded-full hover:bg-stitch hover:text-white transition-colors"><CalendarDays size={16} /></button>
+                         <button onClick={(e) => { e.stopPropagation(); setSwipeId(swipeId === item.id ? null : item.id); }} className="text-navy/20 active:scale-125 transition-transform"><MoreHorizontal size={20} /></button>
                       </div>
                     </div>
-                    
                     <div className="flex flex-col gap-1 mb-3">
                        <h3 className="text-2xl font-black text-navy leading-none tracking-tight">{item.title || item.location}</h3>
-                       <div className="flex items-center gap-1.5 text-navy/50">
-                          <MapPin size={12} className="text-stitch" />
-                          <span className="text-xs font-bold truncate">{item.location}</span>
-                       </div>
+                       <div className="flex items-center gap-1.5 text-navy/50"><MapPin size={12} className="text-stitch" /><span className="text-xs font-bold truncate">{item.location}</span></div>
                     </div>
-
                     <div className="flex items-center justify-between border-t border-accent/30 pt-3 mt-1">
-                       <div className="text-xl font-black text-navy tabular-nums">
-                          {item.time} 
-                          {item.endTime && <span className="text-navy/30 text-base font-bold ml-1">- {item.endTime}</span>}
-                       </div>
-
+                       <div className="text-xl font-black text-navy tabular-nums">{item.time}{item.endTime && <span className="text-navy/30 text-base font-bold ml-1">- {item.endTime}</span>}</div>
                        <div className="flex gap-2">
-                          <button 
-                            onClick={(e) => handleOpenMaps(e, item.location)}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-cream rounded-full border border-accent text-[10px] font-black text-navy/60 hover:bg-green-100 hover:text-green-700 transition-all active:scale-95"
-                          >
-                            <Navigation size={10} /> GO
-                          </button>
-                          
-                          {linkedBooking && (
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); onNavigate('bookings', linkedBooking.id); }}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-donald/20 rounded-full border border-donald/50 text-[10px] font-black text-navy/70 hover:bg-donald hover:text-navy transition-all active:scale-95"
-                            >
-                              <TicketIcon size={10} /> TICKET
-                            </button>
-                          )}
+                          <button onClick={(e) => handleOpenMaps(e, item.location)} className="flex items-center gap-1 px-3 py-1.5 bg-cream rounded-full border border-accent text-[10px] font-black text-navy/60 hover:bg-green-100 hover:text-green-700 transition-all active:scale-95"><Navigation size={10} /> GO</button>
+                          {linkedBooking && <button onClick={(e) => { e.stopPropagation(); onNavigate('bookings', linkedBooking.id); }} className="flex items-center gap-1 px-3 py-1.5 bg-donald/20 rounded-full border border-donald/50 text-[10px] font-black text-navy/70 hover:bg-donald hover:text-navy transition-all active:scale-95"><TicketIcon size={10} /> TICKET</button>}
                        </div>
                     </div>
-                    
                     {item.notes && <div className="mt-3 text-[10px] text-navy/60 bg-cream/50 p-2 rounded-lg italic leading-relaxed whitespace-pre-wrap">{item.notes}</div>}
                   </div>
                 </div>
@@ -626,15 +507,10 @@ const Schedule: React.FC<ScheduleProps> = ({
       </div>
 
       <div className="fixed bottom-24 right-6 flex flex-col gap-3 z-50">
-        <button onClick={() => setIsSettingsOpen(true)} className="w-12 h-12 bg-white text-navy rounded-full sticker-shadow border border-accent flex items-center justify-center active:scale-90 transition-transform">
-          <Settings size={20} />
-        </button>
-        <button onClick={() => openAddModal('schedule')} className="w-14 h-14 bg-donald text-navy rounded-full sticker-shadow border-2 border-paper flex items-center justify-center active:scale-95 transition-transform shadow-lg">
-          <Plus size={32} />
-        </button>
+        <button onClick={() => setIsSettingsOpen(true)} className="w-12 h-12 bg-white text-navy rounded-full sticker-shadow border border-accent flex items-center justify-center active:scale-90 transition-transform"><Settings size={20} /></button>
+        <button onClick={() => openAddModal('schedule')} className="w-14 h-14 bg-donald text-navy rounded-full sticker-shadow border-2 border-paper flex items-center justify-center active:scale-95 transition-transform shadow-lg"><Plus size={32} /></button>
       </div>
 
-      {/* Move to Day Modal */}
       {movingItem && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-navy/20 backdrop-blur-sm animate-in fade-in" onClick={() => setMovingItem(null)}>
            <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/20 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -644,15 +520,7 @@ const Schedule: React.FC<ScheduleProps> = ({
               </div>
               <div className="grid grid-cols-2 gap-3">
                  {days.map(day => (
-                    <button
-                       key={day.index}
-                       onClick={() => moveItemToDay(movingItem, day.index)}
-                       className={`p-4 rounded-2xl border-2 transition-all text-left ${
-                          movingItem.dayIndex === day.index 
-                             ? 'bg-navy border-navy text-white' 
-                             : 'bg-white border-accent text-navy hover:border-stitch'
-                       }`}
-                    >
+                    <button key={day.index} onClick={() => moveItemToDay(movingItem, day.index)} className={`p-4 rounded-2xl border-2 transition-all text-left ${movingItem.dayIndex === day.index ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy hover:border-stitch'}`}>
                        <p className="text-[9px] font-black uppercase opacity-60 mb-1">{day.weekday}</p>
                        <p className="text-xl font-black">{day.date}</p>
                     </button>
@@ -683,10 +551,7 @@ const Schedule: React.FC<ScheduleProps> = ({
                  <div className="space-y-2">
                     {members.map(member => (
                        <div key={member.id} className="flex items-center justify-between p-3 bg-cream rounded-xl border border-accent/50 group">
-                          <div className="flex items-center gap-3">
-                             <img src={member.avatar} className="w-8 h-8 rounded-full border border-white" />
-                             <div><p className="font-black text-sm text-navy">{member.name}</p></div>
-                          </div>
+                          <div className="flex items-center gap-3"><img src={member.avatar} className="w-8 h-8 rounded-full border border-white" /><div><p className="font-black text-sm text-navy">{member.name}</p></div></div>
                           <div className="flex items-center gap-1">
                              <button onClick={() => startEditingMember(member)} className="p-2 text-navy/20 hover:text-stitch active:scale-90"><Edit2 size={16} /></button>
                              {currentUser.id !== member.id && <button onClick={() => onDeleteMember(member.id)} className="p-2 text-navy/20 hover:text-red-400 active:scale-90"><Trash2 size={16} /></button>}
@@ -694,313 +559,52 @@ const Schedule: React.FC<ScheduleProps> = ({
                        </div>
                     ))}
                  </div>
-                 
-                 {/* Add/Edit Member Input Area */}
                  <div className={`bg-cream p-4 rounded-xl border transition-all ${editingMemberId ? 'border-stitch ring-1 ring-stitch shadow-md' : 'border-accent/60'}`}>
-                    <div className="flex justify-between items-center mb-2">
-                       <p className="text-[10px] font-black uppercase text-navy/30 tracking-widest">{editingMemberId ? 'Edit Member' : 'Add New Member'}</p>
-                       {editingMemberId && (
-                          <button onClick={cancelEditingMember} className="flex items-center gap-1 text-[9px] font-bold text-red-400 uppercase">
-                             <RotateCcw size={10} /> Cancel
-                          </button>
-                       )}
-                    </div>
-                    
+                    <div className="flex justify-between items-center mb-2"><p className="text-[10px] font-black uppercase text-navy/30 tracking-widest">{editingMemberId ? 'Edit Member' : 'Add New Member'}</p>{editingMemberId && <button onClick={cancelEditingMember} className="flex items-center gap-1 text-[9px] font-bold text-red-400 uppercase"><RotateCcw size={10} /> Cancel</button>}</div>
                     <div className="space-y-3">
-                       <input 
-                          type="text" 
-                          value={newMemberName} 
-                          onChange={e => setNewMemberName(e.target.value)} 
-                          placeholder="Name" 
-                          className="w-full p-3 bg-white border border-accent rounded-xl text-sm font-bold focus:ring-2 focus:ring-stitch outline-none" 
-                       />
-                       
-                       {/* Avatar Type Selector */}
+                       <input type="text" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="Name" className="w-full p-3 bg-white border border-accent rounded-xl text-sm font-bold focus:ring-2 focus:ring-stitch outline-none" />
                        <div className="flex gap-1 p-1 bg-white rounded-lg border border-accent/40">
-                          <button 
-                            onClick={() => setNewMemberAvatarType('emoji')}
-                            className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'emoji' ? 'bg-donald text-navy shadow-sm' : 'text-navy/30'}`}
-                          >
-                            <Smile size={12} /> Emoji
-                          </button>
-                          <button 
-                            onClick={() => setNewMemberAvatarType('upload')}
-                            className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'upload' ? 'bg-stitch text-white shadow-sm' : 'text-navy/30'}`}
-                          >
-                            <Upload size={12} /> Upload
-                          </button>
-                          <button 
-                            onClick={() => setNewMemberAvatarType('random')}
-                            className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'random' ? 'bg-white border text-navy shadow-sm' : 'text-navy/30'}`}
-                          >
-                            <ImageIcon size={12} /> Random
-                          </button>
+                          <button onClick={() => setNewMemberAvatarType('emoji')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'emoji' ? 'bg-donald text-navy shadow-sm' : 'text-navy/30'}`}><Smile size={12} /> Emoji</button>
+                          <button onClick={() => setNewMemberAvatarType('upload')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'upload' ? 'bg-stitch text-white shadow-sm' : 'text-navy/30'}`}><Upload size={12} /> Upload</button>
+                          <button onClick={() => setNewMemberAvatarType('random')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'random' ? 'bg-white border text-navy shadow-sm' : 'text-navy/30'}`}><ImageIcon size={12} /> Random</button>
                        </div>
-
-                       {/* Conditional Input */}
-                       {newMemberAvatarType === 'emoji' && (
-                          <div className="flex items-center gap-2">
-                             <input 
-                               type="text" 
-                               maxLength={2}
-                               value={newMemberEmoji} 
-                               onChange={e => setNewMemberEmoji(e.target.value)} 
-                               className="w-12 h-12 text-center text-2xl bg-white border border-accent rounded-xl focus:ring-2 focus:ring-donald outline-none" 
-                             />
-                             <p className="text-[10px] text-navy/40 font-bold">Pick an emoji avatar!</p>
-                          </div>
-                       )}
-
-                       {newMemberAvatarType === 'upload' && (
-                          <div 
-                            className="w-full h-24 border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center cursor-pointer bg-white relative overflow-hidden group hover:border-stitch/50 transition-colors"
-                            onClick={() => document.getElementById('setting-avatar-upload')?.click()}
-                          >
-                             {uploadedAvatar ? (
-                                <div className="relative w-full h-full group-hover:opacity-90 transition-opacity">
-                                   <img src={uploadedAvatar} className="w-full h-full object-cover" />
-                                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
-                                      <Camera size={20} className="text-white drop-shadow-md" />
-                                   </div>
-                                   {/* DELETE AVATAR BUTTON */}
-                                   <button 
-                                      onClick={(e) => { 
-                                        e.stopPropagation(); 
-                                        setUploadedAvatar(''); 
-                                      }}
-                                      className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-all z-10"
-                                      title="Remove Avatar"
-                                   >
-                                      <X size={12} strokeWidth={3} />
-                                   </button>
-                                </div>
-                             ) : (
-                                <>
-                                   <Camera size={20} className="text-stitch mb-1" />
-                                   <span className="text-[10px] font-black text-navy/40 uppercase">Tap to Upload</span>
-                                </>
-                             )}
-                             <input 
-                               id="setting-avatar-upload"
-                               type="file" 
-                               accept="image/*"
-                               onChange={handleAvatarUpload}
-                               className="hidden" 
-                             />
-                          </div>
-                       )}
-
-                       {newMemberAvatarType === 'random' && (
-                          <p className="text-[10px] text-navy/40 font-bold px-1">A random cute photo will be assigned.</p>
-                       )}
-
-                       <button onClick={handleMemberSubmit} disabled={!newMemberName.trim()} className="w-full py-3 bg-navy text-white rounded-xl font-black flex items-center justify-center gap-2 disabled:opacity-50 mt-2 hover:bg-navy/90 active:scale-95 transition-all">
-                          {editingMemberId ? <><Check size={16} /> Save Changes</> : <><Plus size={16} /> Add Member</>}
-                       </button>
+                       {newMemberAvatarType === 'emoji' && <div className="flex items-center gap-2"><input type="text" maxLength={2} value={newMemberEmoji} onChange={e => setNewMemberEmoji(e.target.value)} className="w-12 h-12 text-center text-2xl bg-white border border-accent rounded-xl focus:ring-2 focus:ring-donald outline-none" /><p className="text-[10px] text-navy/40 font-bold">Pick an emoji!</p></div>}
+                       {newMemberAvatarType === 'upload' && <div className="w-full h-24 border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center cursor-pointer bg-white relative overflow-hidden group hover:border-stitch/50 transition-colors" onClick={() => document.getElementById('setting-avatar-upload')?.click()}>{uploadedAvatar ? <div className="relative w-full h-full group-hover:opacity-90 transition-opacity"><img src={uploadedAvatar} className="w-full h-full object-cover" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"><Camera size={20} className="text-white drop-shadow-md" /></div><button onClick={(e) => { e.stopPropagation(); setUploadedAvatar(''); }} className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-all z-10"><X size={12} strokeWidth={3} /></button></div> : <><Camera size={20} className="text-stitch mb-1" /><span className="text-[10px] font-black text-navy/40 uppercase">Tap to Upload</span></>}<input id="setting-avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" /></div>}
+                       <button onClick={handleMemberSubmit} disabled={!newMemberName.trim()} className="w-full py-3 bg-navy text-white rounded-xl font-black flex items-center justify-center gap-2 disabled:opacity-50 mt-2 hover:bg-navy/90 active:scale-95 transition-all">{editingMemberId ? <><Check size={16} /> Save Changes</> : <><Plus size={16} /> Add Member</>}</button>
                     </div>
                  </div>
                </div>
-
-               {/* Data Backup & Restore Section */}
                <div className="space-y-4 pt-4 border-t border-accent/40">
-                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em] flex items-center gap-2">
-                   <FileJson size={12} /> Data Backup
-                 </h4>
+                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em] flex items-center gap-2"><FileJson size={12} /> Data Backup</h4>
                  <div className="grid grid-cols-2 gap-3">
-                   {/* Export Button */}
-                   <button 
-                      onClick={handleExportData}
-                      className="flex flex-col items-center justify-center gap-2 p-4 bg-navy/5 border-2 border-navy/10 rounded-2xl hover:bg-stitch/10 hover:border-stitch/30 transition-colors active:scale-95"
-                   >
-                      <div className="p-2 bg-white rounded-full text-navy shadow-sm">
-                        <Download size={18} />
-                      </div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-navy">Export Trip</span>
-                   </button>
-
-                   {/* Import Button */}
-                   <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="flex flex-col items-center justify-center gap-2 p-4 bg-donald/10 border-2 border-donald/20 rounded-2xl hover:bg-donald/20 hover:border-donald/40 transition-colors active:scale-95"
-                   >
-                      <div className="p-2 bg-white rounded-full text-navy shadow-sm">
-                        <Upload size={18} />
-                      </div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-navy">Import Trip</span>
-                      <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        onChange={handleImportData} 
-                        accept=".json"
-                        className="hidden" 
-                      />
-                   </button>
+                   <button onClick={handleExportData} className="flex flex-col items-center justify-center gap-2 p-4 bg-navy/5 border-2 border-navy/10 rounded-2xl hover:bg-stitch/10 hover:border-stitch/30 transition-colors active:scale-95"><div className="p-2 bg-white rounded-full text-navy shadow-sm"><Download size={18} /></div><span className="text-[10px] font-black uppercase tracking-wider text-navy">Export Trip</span></button>
+                   <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center justify-center gap-2 p-4 bg-donald/10 border-2 border-donald/20 rounded-2xl hover:bg-donald/20 hover:border-donald/40 transition-colors active:scale-95"><div className="p-2 bg-white rounded-full text-navy shadow-sm"><Upload size={18} /></div><span className="text-[10px] font-black uppercase tracking-wider text-navy">Import Trip</span><input type="file" ref={fileInputRef} onChange={handleImportData} accept=".json" className="hidden" /></button>
                  </div>
-                 <p className="text-[9px] text-navy/30 text-center px-4 leading-tight">
-                   Backup your itinerary to share with friends or restore on another device.
-                 </p>
                </div>
             </div>
           </div>
         </div>
       )}
-
       {isAddModalOpen && (
-        <AddItemModal 
-          target={addItemTarget} 
-          mode={modalMode}
-          initialData={editingItem} 
-          duration={config.duration}
-          startDate={config.startDate}
-          onClose={() => setIsAddModalOpen(false)} 
-          onSave={handleSaveItem} 
-        />
+        <AddItemModal target={addItemTarget} mode={modalMode} initialData={editingItem} duration={config.duration} startDate={config.startDate} onClose={() => setIsAddModalOpen(false)} onSave={handleSaveItem} />
       )}
     </div>
   );
 };
 
-// Simplified Add/Edit Modal
-const AddItemModal: React.FC<{ 
-  target: 'schedule' | 'pool'; 
-  mode: 'add' | 'edit';
-  initialData: ScheduleItem | null; 
-  duration: number;
-  startDate: string;
-  onClose: () => void; 
-  onSave: (item: any) => void 
-}> = ({ target, mode, initialData, duration, startDate, onClose, onSave }) => {
-  const [formData, setFormData] = useState({
-    dayIndex: initialData?.dayIndex !== undefined ? initialData.dayIndex : (target === 'pool' ? -1 : 0),
-    time: initialData?.time || '10:00', 
-    endTime: initialData?.endTime || '',
-    title: initialData?.title || '', 
-    location: initialData?.location || '', 
-    category: initialData?.category || 'Attraction', 
-    notes: initialData?.notes || '',
-  });
-  
+const AddItemModal: React.FC<{ target: 'pool' | 'schedule'; mode: 'add' | 'edit'; initialData: ScheduleItem | null; duration: number; startDate: string; onClose: () => void; onSave: (item: any) => void }> = ({ target, mode, initialData, duration, startDate, onClose, onSave }) => {
+  const [formData, setFormData] = useState({ dayIndex: initialData?.dayIndex !== undefined ? initialData.dayIndex : (target === 'pool' ? -1 : 0), time: initialData?.time || '10:00', endTime: initialData?.endTime || '', title: initialData?.title || '', location: initialData?.location || '', category: initialData?.category || 'Attraction', notes: initialData?.notes || '', });
   const [showDetails, setShowDetails] = useState(target === 'schedule' || mode === 'edit'); 
-
   const categories: Category[] = ['Attraction', 'Restaurant', 'Transport', 'Stay', 'Shopping', 'Other'];
-
-  const daysOptions = Array.from({ length: duration }, (_, i) => {
-    const d = new Date(startDate);
-    d.setDate(d.getDate() + i);
-    return {
-       index: i,
-       label: `Day ${i + 1} - ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-    };
-  });
+  const daysOptions = Array.from({ length: duration }, (_, i) => { const d = new Date(startDate); d.setDate(d.getDate() + i); return { index: i, label: `Day ${i + 1} - ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` }; });
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-cream animate-in slide-in-from-bottom duration-300">
-      <div className="p-4 flex justify-between items-center border-b border-accent bg-paper">
-        <button onClick={onClose} className="text-navy/40 p-2"><X size={24} /></button>
-        <h3 className="text-lg font-black text-navy uppercase tracking-widest">
-           {mode === 'add' ? (target === 'pool' ? 'New Idea' : 'Add Stop') : 'Edit Item'}
-        </h3>
-        <button onClick={() => onSave(formData)} className="text-stitch font-black p-2" disabled={!formData.location}>DONE</button>
-      </div>
-      
+      <div className="p-4 flex justify-between items-center border-b border-accent bg-paper"><button onClick={onClose} className="text-navy/40 p-2"><X size={24} /></button><h3 className="text-lg font-black text-navy uppercase tracking-widest">{mode === 'add' ? (target === 'pool' ? 'New Idea' : 'Add Stop') : 'Edit Item'}</h3><button onClick={() => onSave(formData)} className="text-stitch font-black p-2" disabled={!formData.location}>DONE</button></div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Main Input - Location */}
-        <div className="bg-paper p-6 rounded-3xl-sticker border border-accent sticker-shadow">
-          <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Where to?</label>
-          <div className="flex items-center gap-3">
-            <MapPin size={28} className="text-stitch flex-shrink-0" />
-            <input 
-              autoFocus 
-              type="text" 
-              value={formData.location} 
-              onChange={e => setFormData({...formData, location: e.target.value})} 
-              placeholder="e.g. Tokyo Tower" 
-              className="w-full text-2xl font-black bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" 
-            />
-          </div>
-          <div className="mt-4 pt-4 border-t border-accent/20">
-             <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Title (Optional)</label>
-             <input 
-               type="text" 
-               value={formData.title} 
-               onChange={e => setFormData({...formData, title: e.target.value})} 
-               placeholder="Activity Name (e.g. Shopping Spree)" 
-               className="w-full text-lg font-bold bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" 
-             />
-          </div>
-        </div>
-
-        {/* Categories Chips */}
-        <div>
-           <label className="text-[10px] font-black uppercase text-navy/30 mb-3 block px-1 tracking-widest">Category</label>
-           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setFormData({...formData, category: cat as any})}
-                  className={`flex-shrink-0 px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider border-2 transition-all ${
-                    formData.category === cat 
-                      ? 'bg-navy border-navy text-white sticker-shadow scale-105' 
-                      : 'bg-white border-accent text-navy/40'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-           </div>
-        </div>
-
-        {/* Collapsible Details including Day Selector */}
-        <div className="space-y-4">
-           {/* If details hidden (adding new pool item), show expand button */}
-           {!showDetails && (
-              <button 
-                onClick={() => setShowDetails(true)}
-                className="w-full py-3 text-xs font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-stitch/5 rounded-xl transition-colors"
-              >
-                 <Plus size={14} /> Add Time, Day & Notes
-              </button>
-           )}
-
-           {showDetails && (
-             <div className="animate-in slide-in-from-top-4 fade-in duration-300 space-y-4">
-               {/* Day Selector (Modify Date Function) */}
-               <div className="bg-white p-4 rounded-2xl border border-accent">
-                   <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Day</label>
-                   <select 
-                      value={formData.dayIndex} 
-                      onChange={e => setFormData({...formData, dayIndex: parseInt(e.target.value)})}
-                      className="w-full font-black text-lg bg-transparent border-none p-0 focus:ring-0 text-navy"
-                   >
-                      <option value={-1}>Inspiration Pool (No Date)</option>
-                      {daysOptions.map(d => (
-                         <option key={d.index} value={d.index}>{d.label}</option>
-                      ))}
-                   </select>
-               </div>
-
-               <div className="bg-white p-4 rounded-2xl border border-accent">
-                   <label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Time & Duration</label>
-                   <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                         <span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">Start</span>
-                         <input type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0" />
-                      </div>
-                      <ArrowRight size={16} className="text-navy/10 mt-4" />
-                      <div className="flex-1">
-                         <span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">End (Optional)</span>
-                         <input type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0 text-navy/60" />
-                      </div>
-                   </div>
-               </div>
-
-               <div className="bg-white p-4 rounded-2xl border border-accent">
-                  <label className="text-[10px] font-black uppercase text-navy/30 mb-1 block">Notes</label>
-                  <textarea rows={3} value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Details..." className="w-full text-sm bg-transparent border-none p-0 focus:ring-0 resize-none font-medium" />
-               </div>
-             </div>
-           )}
-        </div>
+        <div className="bg-paper p-6 rounded-3xl-sticker border border-accent sticker-shadow"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Where to?</label><div className="flex items-center gap-3"><MapPin size={28} className="text-stitch flex-shrink-0" /><input autoFocus type="text" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="e.g. Tokyo Tower" className="w-full text-2xl font-black bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" /></div><div className="mt-4 pt-4 border-t border-accent/20"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Title (Optional)</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Activity Name" className="w-full text-lg font-bold bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" /></div></div>
+        <div><label className="text-[10px] font-black uppercase text-navy/30 mb-3 block px-1 tracking-widest">Category</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{categories.map(cat => <button key={cat} onClick={() => setFormData({...formData, category: cat as any})} className={`flex-shrink-0 px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider border-2 transition-all ${formData.category === cat ? 'bg-navy border-navy text-white sticker-shadow scale-105' : 'bg-white border-accent text-navy/40'}`}>{cat}</button>)}</div></div>
+        <div className="space-y-4">{!showDetails && <button onClick={() => setShowDetails(true)} className="w-full py-3 text-xs font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-stitch/5 rounded-xl transition-colors"><Plus size={14} /> Add Time, Day & Notes</button>}{showDetails && <div className="animate-in slide-in-from-top-4 fade-in duration-300 space-y-4"><div className="bg-white p-4 rounded-2xl border border-accent"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Day</label><select value={formData.dayIndex} onChange={e => setFormData({...formData, dayIndex: parseInt(e.target.value)})} className="w-full font-black text-lg bg-transparent border-none p-0 focus:ring-0 text-navy"><option value={-1}>Pool (No Date)</option>{daysOptions.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}</select></div><div className="bg-white p-4 rounded-2xl border border-accent"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Time</label><div className="flex items-center gap-3"><div className="flex-1"><span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">Start</span><input type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0" /></div><ArrowRight size={16} className="text-navy/10 mt-4" /><div className="flex-1"><span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">End</span><input type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0 text-navy/60" /></div></div></div><div className="bg-white p-4 rounded-2xl border border-accent"><label className="text-[10px] font-black uppercase text-navy/30 mb-1 block">Notes</label><textarea rows={3} value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Details..." className="w-full text-sm bg-transparent border-none p-0 focus:ring-0 resize-none font-medium" /></div></div>}</div>
       </div>
     </div>
   );
