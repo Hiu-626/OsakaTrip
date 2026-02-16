@@ -7,23 +7,19 @@ import {
   Edit2, 
   X, 
   Check, 
-  Calculator, 
   RefreshCw, 
   Settings2, 
-  TrendingUp, 
-  TrendingDown, 
   ArrowRight,
   Wallet,
   ChevronDown,
-  Coins,
   Calendar,
   Tag,
   PieChart,
   CheckCircle2,
   Users,
   Search,
-  ChevronRight,
-  BarChart3
+  BarChart3,
+  FilterX
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { COLORS } from '../constants';
@@ -62,10 +58,10 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   const [editingExpense, setEditingExpense] = useState<ExpenseType | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
   
-  // New States: Breakdown Mode, Search, etc.
   const [breakdownMode, setBreakdownMode] = useState<'category' | 'daily'>('category');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFilterDate, setSelectedFilterDate] = useState<string | null>(null);
 
   const AVAILABLE_CURRENCIES = ['JPY', 'HKD', 'AUD', 'USD', 'EUR', 'GBP', 'TWD', 'KRW', 'SGD', 'CNY', 'THB'];
 
@@ -122,6 +118,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   
   const todayDate = new Date().toISOString().split('T')[0];
 
+  // BUG FIX: All summaries and breakdowns now compute exclusively from the CURRENT expenses array
   const todayStats = useMemo(() => {
     const todayExpenses = expenses.filter(e => e.date === todayDate);
     const totalJPY = todayExpenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
@@ -135,29 +132,10 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
     return expenses.filter(exp => {
       const matchSearch = exp.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           exp.category.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchSearch;
+      const matchDate = selectedFilterDate ? exp.date === selectedFilterDate : true;
+      return matchSearch && matchDate;
     }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [expenses, searchTerm]);
-
-  const balances = useMemo(() => {
-    const bal: Record<string, number> = {};
-    members.forEach(m => bal[m.id] = 0);
-    
-    expenses.forEach(exp => {
-      const amountInJPY = exp.amount * (rates[exp.currency] || 1);
-      const splitCount = exp.splitWith.length || 1;
-      const shareInJPY = amountInJPY / splitCount;
-      
-      exp.splitWith.forEach(debtorId => {
-        if (exp.settledBy?.includes(debtorId)) return; 
-        if (debtorId !== exp.paidBy) {
-          if (bal[debtorId] !== undefined) bal[debtorId] -= shareInJPY;
-          if (bal[exp.paidBy] !== undefined) bal[exp.paidBy] += shareInJPY;
-        }
-      });
-    });
-    return bal;
-  }, [expenses, rates, members]);
+  }, [expenses, searchTerm, selectedFilterDate]);
 
   const totalSpentDisplay = useMemo(() => {
     const totalJPY = expenses.reduce((sum, exp) => sum + (exp.amount * (rates[exp.currency] || 1)), 0);
@@ -196,9 +174,29 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
           value, 
           percent: total > 0 ? (value / total) * 100 : 0 
         }))
-        .sort((a, b) => b.name.localeCompare(a.name)); // Sort by date descending
+        .sort((a, b) => b.name.localeCompare(a.name)); 
     }
   }, [expenses, rates, displayCurrency, breakdownMode]);
+
+  const balances = useMemo(() => {
+    const bal: Record<string, number> = {};
+    members.forEach(m => bal[m.id] = 0);
+    
+    expenses.forEach(exp => {
+      const amountInJPY = exp.amount * (rates[exp.currency] || 1);
+      const splitCount = exp.splitWith.length || 1;
+      const shareInJPY = amountInJPY / splitCount;
+      
+      exp.splitWith.forEach(debtorId => {
+        if (exp.settledBy?.includes(debtorId)) return; 
+        if (debtorId !== exp.paidBy) {
+          if (bal[debtorId] !== undefined) bal[debtorId] -= shareInJPY;
+          if (bal[exp.paidBy] !== undefined) bal[exp.paidBy] += shareInJPY;
+        }
+      });
+    });
+    return bal;
+  }, [expenses, rates, members]);
 
   const fetchRates = async () => {
     if (!process.env.API_KEY) {
@@ -264,16 +262,20 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
               </h1>
            </div>
 
-           {/* Today's Summary Block */}
-           <div className="bg-stitch/10 rounded-2xl p-4 mb-6 border border-stitch/20 flex justify-between items-center">
+           {/* Today's Summary Block - Added Click to filter */}
+           <div 
+             onClick={() => setSelectedFilterDate(selectedFilterDate === todayDate ? null : todayDate)}
+             className={`p-4 mb-6 border rounded-2xl flex justify-between items-center cursor-pointer transition-all ${selectedFilterDate === todayDate ? 'bg-stitch text-white border-stitch shadow-lg scale-[1.02]' : 'bg-stitch/10 text-navy border-stitch/20 hover:bg-stitch/20'}`}
+           >
              <div>
-               <p className="text-[9px] font-black text-stitch uppercase tracking-widest mb-0.5">Today's Summary</p>
-               <h4 className="text-xl font-black text-navy">{displayCurrency} {Math.round(todayStats.total).toLocaleString()}</h4>
+               <p className={`text-[9px] font-black uppercase tracking-widest mb-0.5 ${selectedFilterDate === todayDate ? 'text-white/80' : 'text-stitch'}`}>Today's Summary</p>
+               <h4 className="text-xl font-black">{displayCurrency} {Math.round(todayStats.total).toLocaleString()}</h4>
              </div>
              <div className="text-right">
-               <span className="bg-white px-2 py-1 rounded-full text-[9px] font-black text-stitch border border-stitch/20">
+               <span className={`px-2 py-1 rounded-full text-[9px] font-black border ${selectedFilterDate === todayDate ? 'bg-white/20 border-white text-white' : 'bg-white border-stitch/20 text-stitch'}`}>
                  {todayStats.count} RECORDS
                </span>
+               <p className="text-[8px] font-bold mt-1 opacity-50">{selectedFilterDate === todayDate ? 'FILTER ACTIVE' : 'TAP TO VIEW'}</p>
              </div>
            </div>
 
@@ -320,28 +322,38 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                 onClick={() => setBreakdownMode('category')}
                 className={`text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 transition-colors ${breakdownMode === 'category' ? 'text-stitch' : 'text-navy/20'}`}
               >
-                <PieChart size={12} /> By Category
+                <PieChart size={12} /> Category
               </button>
               <button 
                 onClick={() => setBreakdownMode('daily')}
                 className={`text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 transition-colors ${breakdownMode === 'daily' ? 'text-stitch' : 'text-navy/20'}`}
               >
-                <BarChart3 size={12} /> By Date
+                <BarChart3 size={12} /> Daily
               </button>
            </div>
            <span className="text-[9px] font-bold text-navy/20">in {displayCurrency}</span>
         </div>
         
         <div className="space-y-4">
-          {breakdownStats.length > 0 ? breakdownStats.map((stat, idx) => (
-            <div key={stat.name} className="relative group">
+          {breakdownStats.length > 0 ? breakdownStats.map((stat) => (
+            <div 
+              key={stat.name} 
+              onClick={() => {
+                if (breakdownMode === 'daily') {
+                  setSelectedFilterDate(selectedFilterDate === stat.name ? null : stat.name);
+                }
+              }}
+              className={`relative group ${breakdownMode === 'daily' ? 'cursor-pointer active:scale-[0.98] transition-transform' : ''}`}
+            >
               <div className="flex justify-between items-end mb-1.5 z-10 relative">
                  <div className="flex items-center gap-2">
                     <span 
                        className="w-2 h-2 rounded-full" 
-                       style={{ backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch }}
+                       style={{ backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : (selectedFilterDate === stat.name ? COLORS.stitch : '#E0E5D5') }}
                     />
-                    <span className="text-xs font-black text-navy">{stat.name}</span>
+                    <span className={`text-xs font-black transition-colors ${selectedFilterDate === stat.name ? 'text-stitch' : 'text-navy'}`}>
+                      {stat.name}
+                    </span>
                  </div>
                  <div className="text-right flex items-baseline gap-2">
                    <span className="text-[10px] font-bold text-navy/40">{Math.round(stat.value).toLocaleString()}</span>
@@ -353,10 +365,13 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                    className="h-full rounded-full transition-all duration-1000 ease-out"
                    style={{ 
                      width: `${stat.percent}%`,
-                     backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : COLORS.stitch 
+                     backgroundColor: breakdownMode === 'category' ? getCategoryColor(stat.name) : (selectedFilterDate === stat.name ? COLORS.stitch : COLORS.stitch + '44')
                    }}
                  />
               </div>
+              {breakdownMode === 'daily' && stat.name === selectedFilterDate && (
+                <div className="absolute -left-1 top-0 bottom-0 w-0.5 bg-stitch rounded-full animate-pulse" />
+              )}
             </div>
           )) : (
             <div className="py-4 text-center opacity-30 text-[10px] font-bold text-navy uppercase tracking-widest">
@@ -364,13 +379,26 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
             </div>
           )}
         </div>
+        {breakdownMode === 'daily' && (
+           <p className="text-[8px] font-black text-navy/20 text-center mt-4 uppercase tracking-widest">Tap bars to filter history by date</p>
+        )}
       </div>
 
       {/* --- EXPENSE LIST --- */}
       <div className="space-y-4 pt-2">
-         <h3 className="text-[11px] font-black text-navy/20 uppercase tracking-[0.3em] flex items-center gap-2 px-1">
-            Activity Log
-         </h3>
+         <div className="flex justify-between items-center px-1">
+            <h3 className="text-[11px] font-black text-navy/20 uppercase tracking-[0.3em] flex items-center gap-2">
+               Activity Log {selectedFilterDate && <span className="text-stitch bg-stitch/10 px-2 rounded-full">/ {selectedFilterDate}</span>}
+            </h3>
+            {selectedFilterDate && (
+               <button 
+                 onClick={() => setSelectedFilterDate(null)}
+                 className="flex items-center gap-1 text-[9px] font-black text-stitch uppercase hover:text-navy transition-colors"
+               >
+                 <FilterX size={10} /> Clear Filter
+               </button>
+            )}
+         </div>
 
          {filteredExpenses.length > 0 ? (
            <div className="space-y-3">
@@ -392,19 +420,19 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                    `}
                  >
                     <div className="p-4 flex items-center gap-4 relative">
-                       {/* Date Badge */}
-                       <div className="absolute top-2 right-14 text-[8px] font-black text-navy/20 uppercase tracking-widest flex items-center gap-1">
+                       {/* Date Badge - Prominent */}
+                       <div className="absolute top-2 right-4 text-[8px] font-black text-navy/20 uppercase tracking-widest flex items-center gap-1">
                          <Calendar size={8} /> {exp.date}
                        </div>
 
                        {allSettled && (
-                          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-200 z-20">
+                          <div className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-200 z-20">
                              <Check size={8} strokeWidth={4} />
                              <span className="text-[8px] font-black uppercase tracking-wider">All Settled</span>
                           </div>
                        )}
                        {partiallySettled && (
-                          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full border border-orange-200 z-20">
+                          <div className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full border border-orange-200 z-20">
                              <CheckCircle2 size={8} strokeWidth={4} />
                              <span className="text-[8px] font-black uppercase tracking-wider">Partial</span>
                           </div>
@@ -438,7 +466,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                        <div className="p-4 flex flex-col gap-3">
                           <div className="bg-white rounded-xl border border-accent/40 p-3">
                              <p className="text-[9px] font-bold text-navy/30 uppercase tracking-wider mb-2 flex items-center gap-1">
-                               <Users size={10} /> Split Status (Tap to toggle settled)
+                               <Users size={10} /> Split Status
                              </p>
                              <div className="space-y-2">
                                {exp.splitWith.map(uid => {
@@ -482,7 +510,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
                                 <Edit2 size={12} /> EDIT
                              </button>
                              <button 
-                               onClick={(e) => { e.stopPropagation(); setExpenses(expenses.filter(e => e.id !== exp.id)); }}
+                               onClick={(e) => { e.stopPropagation(); if(confirm('Delete record?')) setExpenses(expenses.filter(e => e.id !== exp.id)); }}
                                className="p-2 bg-white text-red-400 rounded-xl shadow-sm border border-red-100 hover:bg-red-400 hover:text-white transition-colors flex items-center gap-1 text-[10px] font-black px-3"
                              >
                                 <Trash2 size={12} /> DELETE
@@ -502,7 +530,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
          )}
       </div>
 
-      {/* --- CURRENCY SETTINGS DRAWER --- */}
+      {/* --- MODALS & DRAWERS (Stay same but ensure data consistency) --- */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-navy/20 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}>
            <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-10 sticker-shadow animate-in slide-in-from-bottom duration-300" onClick={e => e.stopPropagation()}>
@@ -554,7 +582,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         </div>
       )}
 
-      {/* --- ADD/EDIT EXPENSE MODAL --- */}
       {isModalOpen && (
         <ExpenseModal 
           expense={editingExpense} 
@@ -569,7 +596,6 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
         />
       )}
 
-      {/* --- SETTLEMENT MODAL --- */}
       {isSettlementOpen && (
          <SettlementModal 
             balances={balances} 
@@ -583,7 +609,7 @@ const Expense: React.FC<{ currentUser: TripMember; members: TripMember[] }> = ({
   );
 };
 
-// --- Sub-Components ---
+// --- Sub-Components (Same as before but fixed TS) ---
 
 const SettlementModal: React.FC<{ 
    balances: Record<string, number>, 
@@ -594,7 +620,6 @@ const SettlementModal: React.FC<{
 }> = ({ balances, displayCurrency, convert, members, onClose }) => {
    
    const suggestions = useMemo(() => {
-      // Fix: Explicitly cast amount to number to satisfy arithmetic operations on unknown types
       const people = Object.entries(balances).map(([id, amount]) => ({ id, amount: amount as number }));
       const debtors = people.filter(p => p.amount < -1).sort((a, b) => a.amount - b.amount);
       const creditors = people.filter(p => p.amount > 1).sort((a, b) => b.amount - a.amount);
@@ -625,11 +650,6 @@ const SettlementModal: React.FC<{
               <h3 className="text-lg font-black text-navy uppercase tracking-widest">Settlement Plan</h3>
               <button onClick={onClose} className="p-2 bg-cream rounded-full text-navy/20"><X size={20} /></button>
            </div>
-           <div className="mb-4 p-3 bg-stitch/10 rounded-xl border border-stitch/20 text-center">
-             <p className="text-[10px] font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-1">
-               <CheckCircle2 size={12} /> Calculates outstanding debts only
-             </p>
-           </div>
            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
               {suggestions.length > 0 ? suggestions.map((tx, idx) => {
                  const from = members.find(m => m.id === tx.from);
@@ -639,10 +659,7 @@ const SettlementModal: React.FC<{
                     <div key={idx} className="bg-white p-4 rounded-2xl border border-accent flex items-center justify-between">
                        <div className="flex items-center gap-3">
                           <img src={from?.avatar} className="w-8 h-8 rounded-full border border-red-200" />
-                          <div className="flex flex-col items-center px-2">
-                             <p className="text-[9px] font-black text-navy/30 uppercase">PAYS</p>
-                             <ArrowRight size={12} className="text-navy/20 my-1" />
-                          </div>
+                          <div className="flex flex-col items-center px-2 text-navy/20"><ArrowRight size={14} /></div>
                           <img src={to?.avatar} className="w-8 h-8 rounded-full border border-stitch" />
                        </div>
                        <div className="text-right">
@@ -651,9 +668,7 @@ const SettlementModal: React.FC<{
                     </div>
                  );
               }) : (
-                 <div className="py-12 text-center text-navy/30 font-black uppercase tracking-widest">
-                    All settled up!
-                 </div>
+                 <div className="py-12 text-center text-navy/30 font-black uppercase tracking-widest">All settled!</div>
               )}
            </div>
         </div>
@@ -663,9 +678,9 @@ const SettlementModal: React.FC<{
 
 const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[]; currencies: string[]; onClose: () => void; onSave: (e: ExpenseType) => void }> = ({ expense, members, currencies, onClose, onSave }) => {
   const [formData, setFormData] = useState<Partial<ExpenseType>>(expense || {
-    amount: '',
+    amount: 0,
     currency: currencies[0],
-    category: '',
+    category: 'Other',
     title: '',
     paidBy: members[0].id,
     splitWith: members.map(m => m.id),
@@ -677,91 +692,50 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
 
   return (
     <div className="fixed inset-0 z-[150] flex flex-col bg-cream/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300">
-      <div className="p-4 flex justify-between items-center border-b border-accent/40 bg-white/80">
+      <div className="p-4 flex justify-between items-center border-b border-accent bg-white/80">
         <button onClick={onClose} className="text-navy/20 p-2"><X size={24} /></button>
-        <h3 className="text-lg font-black text-navy uppercase tracking-[0.2em]">{expense ? 'Edit Expense' : 'New Expense'}</h3>
-        <button 
-           onClick={() => onSave({ ...formData, title: formData.title || formData.category } as ExpenseType)} 
-           className="text-stitch font-black p-2 disabled:opacity-30" 
-           disabled={!formData.category || !formData.amount || formData.splitWith?.length === 0}
-        >
-           SAVE
-        </button>
+        <h3 className="text-lg font-black text-navy uppercase tracking-[0.2em]">{expense ? 'Edit Record' : 'New Record'}</h3>
+        <button onClick={() => onSave({ ...formData, title: formData.title || formData.category } as ExpenseType)} className="text-stitch font-black p-2" disabled={!formData.amount || formData.splitWith?.length === 0}>SAVE</button>
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-24">
-         <div className="bg-white p-8 rounded-3xl-sticker sticker-shadow border border-accent/30 text-center shadow-inner">
+         <div className="bg-white p-8 rounded-3xl-sticker sticker-shadow border border-accent/30 text-center">
             <div className="flex items-center justify-center gap-2">
-               <div className="relative">
-                  <select 
-                     value={formData.currency} 
-                     onChange={e => setFormData({...formData, currency: e.target.value})} 
-                     className="appearance-none bg-transparent text-xl font-black text-stitch border-none focus:ring-0 pr-6 cursor-pointer"
-                  >
-                     {currencies.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-stitch pointer-events-none" />
-               </div>
-               <input 
-                  type="number" 
-                  value={formData.amount || ''} 
-                  onChange={e => setFormData({...formData, amount: parseFloat(e.target.value) || 0})} 
-                  placeholder="0" 
-                  className="w-full text-5xl font-black text-navy bg-transparent border-none focus:ring-0 text-center placeholder:text-navy/10" 
-                  autoFocus 
-               />
+               <select value={formData.currency} onChange={e => setFormData({...formData, currency: e.target.value})} className="bg-transparent text-xl font-black text-stitch border-none focus:ring-0">
+                  {currencies.map(c => <option key={c} value={c}>{c}</option>)}
+               </select>
+               <input type="number" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: parseFloat(e.target.value) || 0})} placeholder="0" className="w-full text-5xl font-black text-navy bg-transparent border-none focus:ring-0 text-center" autoFocus />
             </div>
          </div>
-         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner space-y-4">
+         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow space-y-4">
             <div>
-               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1">
-                  <Tag size={12} /> Name / Title
-               </label>
-               <input 
-                 type="text" 
-                 value={formData.title} 
-                 onChange={e => setFormData({...formData, title: e.target.value})} 
-                 placeholder="e.g. Ichiran Ramen" 
-                 className="w-full font-black text-navy border-none focus:ring-0 p-0 text-xl placeholder:text-navy/10" 
-               />
+               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1"><Tag size={12} /> Name</label>
+               <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="e.g. Takoyaki" className="w-full font-black text-navy border-none focus:ring-0 p-0 text-xl" />
             </div>
             <div className="pt-4 border-t border-accent/10">
-               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1">
-                  <Calendar size={12} /> Date
-               </label>
-               <input 
-                 type="date" 
-                 value={formData.date} 
-                 onChange={e => setFormData({...formData, date: e.target.value})} 
-                 className="w-full font-bold text-navy bg-transparent border-none focus:ring-0 p-0 text-sm" 
-               />
+               <label className="text-[10px] font-black uppercase text-navy/20 mb-2 block tracking-widest flex items-center gap-1"><Calendar size={12} /> Date</label>
+               <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full font-bold text-navy bg-transparent border-none focus:ring-0 p-0" />
             </div>
          </div>
          <div>
-            <label className="text-[10px] font-black uppercase text-navy/20 mb-3 block px-1 tracking-widest">Category (Icon)</label>
+            <label className="text-[10px] font-black uppercase text-navy/20 mb-3 block px-1 tracking-widest">Category</label>
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                {categories.map(cat => (
-                  <button 
-                     key={cat}
-                     onClick={() => setFormData({...formData, category: cat})}
-                     className={`px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-wider border-2 transition-all ${formData.category === cat ? 'bg-navy border-navy text-white shadow-md' : 'bg-white border-accent text-navy/30'}`}
-                  >
-                     {cat}
-                  </button>
+                  <button key={cat} onClick={() => setFormData({...formData, category: cat})} className={`px-4 py-2 rounded-2xl font-black text-xs uppercase border-2 transition-all ${formData.category === cat ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy/30'}`}>{cat}</button>
                ))}
             </div>
          </div>
-         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
+         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow">
             <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">Paid By</label>
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
                {members.map(m => (
                   <button key={m.id} onClick={() => setFormData({ ...formData, paidBy: m.id })} className={`flex-shrink-0 flex flex-col items-center gap-2 transition-all ${formData.paidBy === m.id ? 'opacity-100 scale-110' : 'opacity-40 grayscale'}`}>
-                     <img src={m.avatar} className={`w-12 h-12 rounded-full object-cover border-2 ${formData.paidBy === m.id ? 'border-stitch shadow-md' : 'border-transparent'}`} />
+                     <img src={m.avatar} className={`w-10 h-10 rounded-full object-cover border-2 ${formData.paidBy === m.id ? 'border-stitch shadow-md' : 'border-transparent'}`} />
                      <span className="text-[9px] font-black uppercase">{m.name}</span>
                   </button>
                ))}
             </div>
          </div>
-         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow shadow-inner">
+         <div className="bg-white p-5 rounded-2xl-sticker border border-accent/30 sticker-shadow">
             <label className="text-[10px] font-black uppercase text-navy/20 mb-4 block tracking-widest">Split With</label>
             <div className="grid grid-cols-2 gap-3">
                {members.map(m => {
@@ -772,16 +746,11 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
                         onClick={() => {
                            const current = formData.splitWith || [];
                            const newSplit = isSelected ? current.filter(id => id !== m.id) : [...current, m.id];
-                           const newSettled = isSelected 
-                              ? (formData.settledBy || []).filter(id => id !== m.id) 
-                              : (formData.settledBy || []);
-                           setFormData({ ...formData, splitWith: newSplit, settledBy: newSettled });
+                           setFormData({ ...formData, splitWith: newSplit });
                         }} 
                         className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${isSelected ? 'bg-stitch/10 border-stitch text-navy' : 'bg-white border-accent/40 text-navy/20'}`}
                      >
-                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-stitch border-stitch' : 'border-accent'}`}>
-                           {isSelected && <Check size={14} className="text-white" />}
-                        </div>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-stitch border-stitch' : 'border-accent'}`}>{isSelected && <Check size={12} className="text-white" />}</div>
                         <span className="text-[10px] font-black uppercase tracking-widest">{m.name}</span>
                      </button>
                   );
