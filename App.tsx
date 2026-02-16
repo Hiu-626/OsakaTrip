@@ -65,7 +65,6 @@ const App: React.FC = () => {
 
   const handleUpdateMember = (id: string, name: string, avatar: string) => {
     setMembers(members.map(m => m.id === id ? { ...m, name, avatar } : m));
-    // If updating current user, update local state too
     if (currentUser.id === id) {
       setCurrentUser({ ...currentUser, name, avatar });
     }
@@ -129,7 +128,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen max-w-md mx-auto bg-cream shadow-2xl relative overflow-hidden">
-      {/* Top Sync Bar (Aesthetic) */}
       <div className="absolute top-0 left-0 right-0 z-[60] px-4 py-1 flex justify-center items-center gap-1.5 pointer-events-none">
         <div className="bg-navy/10 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1">
           <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
@@ -139,17 +137,15 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto pb-24 px-4 pt-10">
         {renderContent()}
       </main>
 
-      {/* Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-paper/90 backdrop-blur-lg border-t border-accent px-2 py-3 flex justify-around items-center z-50 rounded-t-3xl shadow-[0_-4px_10px_rgba(0,0,0,0.05)] safe-bottom">
         <NavButton active={activeTab === 'schedule'} onClick={() => handleNavigate('schedule')} icon={<Calendar size={22} />} label="行程" />
         <NavButton active={activeTab === 'bookings'} onClick={() => handleNavigate('bookings')} icon={<Ticket size={22} />} label="票券" />
         <NavButton active={activeTab === 'expense'} onClick={() => handleNavigate('expense')} icon={<Wallet size={22} />} label="記帳" />
-        <NavButton active={activeTab === 'planning'} onClick={() => handleNavigate('planning')} icon={<CheckSquare size={22} />} label="清單" />
+        <NavButton active={activeTab === 'planning'} onClick={() => handleNavigate('planning'} icon={<CheckSquare size={22} />} label="清單" />
       </nav>
     </div>
   );
