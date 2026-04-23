@@ -10,6 +10,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+    },
     define: {
       // 安全地將環境變數注入到前端代碼中
       // 使用 || '' 確保如果變數不存在，會被替換為空字串，而不是 undefined，避免程式崩潰

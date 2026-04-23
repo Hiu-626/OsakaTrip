@@ -20,15 +20,28 @@ const App: React.FC = () => {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string>(new Date().toLocaleTimeString());
   const [members, setMembers] = useState<TripMember[]>(() => {
-    const saved = localStorage.getItem('trip_members');
-    return saved ? JSON.parse(saved) : MOCK_MEMBERS;
+    try {
+      const saved = localStorage.getItem('trip_members');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : MOCK_MEMBERS;
+    } catch (e) {
+      console.error('Failed to parse members from localStorage', e);
+      return MOCK_MEMBERS;
+    }
   });
+
   const [currentUser, setCurrentUser] = useState<TripMember>(() => {
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      const exists = members.find(m => m.id === parsed.id);
-      return exists || members[0];
+    try {
+      const savedUser = localStorage.getItem('currentUser');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        if (parsed && parsed.id) {
+          const exists = members.find(m => m.id === parsed.id);
+          return exists || members[0];
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse currentUser from localStorage', e);
     }
     return members[0];
   });
