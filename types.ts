@@ -57,6 +57,29 @@ export interface TripConfig {
   duration: number;
   tripName: string;
   region: string;
+  coverEmoji?: string;
+}
+
+export interface Trip {
+  id: string;
+  tripName: string;
+  region: string;
+  startDate: string;
+  duration: number;
+  coverEmoji?: string;
+  createdAt: string;
+  updatedAt: string;
+  members: TripMember[];
+  itinerary: ScheduleItem[];
+  pool: ScheduleItem[];
+  bookings: Booking[];
+  expenses: Expense[];
+  planningItems: PlanningItem[];
+  currencySettings?: {
+    activeCurrencies: string[];
+    displayCurrency: string;
+    rates?: Record<string, number>;
+  };
 }
 
 export interface JournalPost {

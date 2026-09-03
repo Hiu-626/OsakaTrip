@@ -540,6 +540,7 @@ const Schedule: React.FC<ScheduleProps> = ({
             <div className="overflow-y-auto pr-2 space-y-6 flex-1 pb-4">
                <div className="space-y-4">
                  <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em]">General</h4>
+                 <div><label className="text-[10px] uppercase text-navy/40 block">Trip Name</label><input type="text" value={config.tripName || ''} onChange={e => setConfig({...config, tripName: e.target.value})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent" /></div>
                  <div><label className="text-[10px] uppercase text-navy/40 block">Region</label><input type="text" value={config.region} onChange={e => setConfig({...config, region: e.target.value})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent" /></div>
                  <div className="grid grid-cols-2 gap-4">
                    <div><label className="text-[10px] uppercase text-navy/40 block">Start</label><input type="date" value={config.startDate} onChange={e => setConfig({...config, startDate: e.target.value})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent text-xs" /></div>
