@@ -40,6 +40,7 @@ interface ScheduleProps {
   onDeleteMember: (id: string) => void;
   onSwitchUser: (member: TripMember) => void;
   onNavigate: (tab: any, id?: string) => void;
+  onOpenFullExport?: () => void;
 }
 
 const Schedule: React.FC<ScheduleProps> = ({ 
@@ -50,7 +51,8 @@ const Schedule: React.FC<ScheduleProps> = ({
   onUpdateMember,
   onDeleteMember, 
   onSwitchUser,
-  onNavigate
+  onNavigate,
+  onOpenFullExport
 }) => {
   const [config, setConfig] = useState<TripConfig>(() => {
     const saved = localStorage.getItem('tripConfig');
@@ -323,6 +325,11 @@ const Schedule: React.FC<ScheduleProps> = ({
   };
 
   const handleExportData = () => {
+    if (onOpenFullExport) {
+      setIsSettingsOpen(false);
+      onOpenFullExport();
+      return;
+    }
     const backupData = {
       tripConfig: localStorage.getItem('tripConfig'),
       itinerary: localStorage.getItem('itinerary'),
@@ -335,15 +342,21 @@ const Schedule: React.FC<ScheduleProps> = ({
       baseCurrency: localStorage.getItem('baseCurrency'),
       timestamp: new Date().toISOString()
     };
-    const blob = new Blob([JSON.stringify(backupData)], { type: 'application/json' });
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `OhanaTrip_Backup_${config.tripName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `OhanaTrip_Backup_${(config.tripName || 'Trip').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      if (link.parentNode) link.parentNode.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 45000);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(jsonStr).catch(() => {});
+    }
   };
 
   const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -512,17 +525,17 @@ const Schedule: React.FC<ScheduleProps> = ({
       </div>
 
       {movingItem && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-6 bg-navy/20 backdrop-blur-sm animate-in fade-in" onClick={() => setMovingItem(null)}>
-           <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/20 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-6">
-                 <h3 className="text-lg font-black text-navy uppercase tracking-widest">Move to Day</h3>
-                 <button onClick={() => setMovingItem(null)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-navy/30 backdrop-blur-xs animate-in fade-in" onClick={() => setMovingItem(null)}>
+           <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 animate-in zoom-in-95 my-auto max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4 pb-2 border-b border-accent/40">
+                 <h3 className="text-base font-black text-navy uppercase tracking-wider">移至指定天數</h3>
+                 <button onClick={() => setMovingItem(null)} className="p-1.5 bg-cream hover:bg-accent/40 rounded-full text-navy/40"><X size={18} /></button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5 overflow-y-auto pr-1">
                  {days.map(day => (
-                    <button key={day.index} onClick={() => moveItemToDay(movingItem, day.index)} className={`p-4 rounded-2xl border-2 transition-all text-left ${movingItem.dayIndex === day.index ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy hover:border-stitch'}`}>
-                       <p className="text-[9px] font-black uppercase opacity-60 mb-1">{day.weekday}</p>
-                       <p className="text-xl font-black">{day.date}</p>
+                    <button key={day.index} onClick={() => moveItemToDay(movingItem, day.index)} className={`p-3 rounded-2xl border-2 transition-all text-left ${movingItem.dayIndex === day.index ? 'bg-navy border-navy text-white sticker-shadow' : 'bg-white border-accent text-navy hover:border-stitch'}`}>
+                       <p className="text-[9px] font-black uppercase opacity-60 mb-0.5">{day.weekday}</p>
+                       <p className="text-lg font-black">{day.date}</p>
                     </button>
                  ))}
               </div>
@@ -531,55 +544,58 @@ const Schedule: React.FC<ScheduleProps> = ({
       )}
 
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-navy/20 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)}>
-          <div className="bg-paper w-full max-w-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/20 relative animate-in zoom-in-95 flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6">
-               <h3 className="text-xl font-black text-navy uppercase tracking-wider">Settings</h3>
-               <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-navy/30 backdrop-blur-xs animate-in fade-in" onClick={() => setIsSettingsOpen(false)}>
+          <div className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 relative animate-in zoom-in-95 flex flex-col max-h-[80vh] my-auto overflow-hidden" onClick={e => e.stopPropagation()}>
+             <div className="flex justify-between items-center mb-4 pb-3 border-b border-accent/40">
+               <div>
+                 <h3 className="text-lg font-black text-navy uppercase tracking-wider">旅程設定 Settings</h3>
+                 <p className="text-[10px] font-bold text-navy/40">調整旅程基本資訊與成員</p>
+               </div>
+               <button onClick={() => setIsSettingsOpen(false)} className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 transition-colors"><X size={18} /></button>
             </div>
-            <div className="overflow-y-auto pr-2 space-y-6 flex-1 pb-4">
-               <div className="space-y-4">
-                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em]">General</h4>
-                 <div><label className="text-[10px] uppercase text-navy/40 block">Trip Name</label><input type="text" value={config.tripName || ''} onChange={e => setConfig({...config, tripName: e.target.value})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent" /></div>
-                 <div><label className="text-[10px] uppercase text-navy/40 block">Region</label><input type="text" value={config.region} onChange={e => setConfig({...config, region: e.target.value})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent" /></div>
-                 <div className="grid grid-cols-2 gap-4">
-                   <div><label className="text-[10px] uppercase text-navy/40 block">Start</label><input type="date" value={config.startDate} onChange={e => setConfig({...config, startDate: e.target.value})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent text-xs" /></div>
-                   <div><label className="text-[10px] uppercase text-navy/40 block">Days</label><input type="number" value={config.duration} onChange={e => setConfig({...config, duration: parseInt(e.target.value) || 1})} className="w-full p-3 bg-cream rounded-xl font-bold border border-accent" /></div>
+            <div className="overflow-y-auto pr-1 space-y-5 flex-1 min-h-0">
+               <div className="space-y-3">
+                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em]">基本資訊 General</h4>
+                 <div><label className="text-[10px] uppercase text-navy/40 block mb-1 font-bold">旅程名稱</label><input type="text" value={config.tripName || ''} onChange={e => setConfig({...config, tripName: e.target.value})} className="w-full p-2.5 bg-cream rounded-xl font-bold border border-accent text-sm" /></div>
+                 <div><label className="text-[10px] uppercase text-navy/40 block mb-1 font-bold">目的地/地區</label><input type="text" value={config.region} onChange={e => setConfig({...config, region: e.target.value})} className="w-full p-2.5 bg-cream rounded-xl font-bold border border-accent text-sm" /></div>
+                 <div className="grid grid-cols-2 gap-3">
+                   <div><label className="text-[10px] uppercase text-navy/40 block mb-1 font-bold">出發日期</label><input type="date" value={config.startDate} onChange={e => setConfig({...config, startDate: e.target.value})} className="w-full p-2.5 bg-cream rounded-xl font-bold border border-accent text-xs" /></div>
+                   <div><label className="text-[10px] uppercase text-navy/40 block mb-1 font-bold">天數</label><input type="number" value={config.duration} onChange={e => setConfig({...config, duration: parseInt(e.target.value) || 1})} className="w-full p-2.5 bg-cream rounded-xl font-bold border border-accent text-sm" /></div>
                  </div>
                </div>
-               <div className="space-y-4 pt-4 border-t border-accent/40">
-                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em]">Members</h4>
+               <div className="space-y-3 pt-4 border-t border-accent/40">
+                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em]">成員管理 Members</h4>
                  <div className="space-y-2">
                     {members.map(member => (
-                       <div key={member.id} className="flex items-center justify-between p-3 bg-cream rounded-xl border border-accent/50 group">
-                          <div className="flex items-center gap-3"><img src={member.avatar} className="w-8 h-8 rounded-full border border-white" /><div><p className="font-black text-sm text-navy">{member.name}</p></div></div>
+                       <div key={member.id} className="flex items-center justify-between p-2.5 bg-cream rounded-xl border border-accent/50 group">
+                          <div className="flex items-center gap-2.5"><img src={member.avatar} className="w-7 h-7 rounded-full border border-white object-cover" /><div><p className="font-black text-xs text-navy">{member.name}</p></div></div>
                           <div className="flex items-center gap-1">
-                             <button onClick={() => startEditingMember(member)} className="p-2 text-navy/20 hover:text-stitch active:scale-90"><Edit2 size={16} /></button>
-                             {currentUser.id !== member.id && <button onClick={() => onDeleteMember(member.id)} className="p-2 text-navy/20 hover:text-red-400 active:scale-90"><Trash2 size={16} /></button>}
+                             <button onClick={() => startEditingMember(member)} className="p-1.5 text-navy/40 hover:text-stitch active:scale-90 transition-colors"><Edit2 size={14} /></button>
+                             {currentUser.id !== member.id && <button onClick={() => onDeleteMember(member.id)} className="p-1.5 text-navy/40 hover:text-red-400 active:scale-90 transition-colors"><Trash2 size={14} /></button>}
                           </div>
                        </div>
                     ))}
                  </div>
-                 <div className={`bg-cream p-4 rounded-xl border transition-all ${editingMemberId ? 'border-stitch ring-1 ring-stitch shadow-md' : 'border-accent/60'}`}>
-                    <div className="flex justify-between items-center mb-2"><p className="text-[10px] font-black uppercase text-navy/30 tracking-widest">{editingMemberId ? 'Edit Member' : 'Add New Member'}</p>{editingMemberId && <button onClick={cancelEditingMember} className="flex items-center gap-1 text-[9px] font-bold text-red-400 uppercase"><RotateCcw size={10} /> Cancel</button>}</div>
-                    <div className="space-y-3">
-                       <input type="text" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="Name" className="w-full p-3 bg-white border border-accent rounded-xl text-sm font-bold focus:ring-2 focus:ring-stitch outline-none" />
+                 <div className={`bg-cream p-3.5 rounded-xl border transition-all ${editingMemberId ? 'border-stitch ring-1 ring-stitch shadow-md' : 'border-accent/60'}`}>
+                    <div className="flex justify-between items-center mb-2"><p className="text-[10px] font-black uppercase text-navy/40 tracking-widest">{editingMemberId ? '編輯成員資料' : '新增旅伴成員'}</p>{editingMemberId && <button onClick={cancelEditingMember} className="flex items-center gap-1 text-[9px] font-bold text-red-400 uppercase"><RotateCcw size={10} /> 取消</button>}</div>
+                    <div className="space-y-2.5">
+                       <input type="text" value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="輸入成員名稱" className="w-full p-2.5 bg-white border border-accent rounded-xl text-xs font-bold focus:ring-2 focus:ring-stitch outline-none" />
                        <div className="flex gap-1 p-1 bg-white rounded-lg border border-accent/40">
-                          <button onClick={() => setNewMemberAvatarType('emoji')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'emoji' ? 'bg-donald text-navy shadow-sm' : 'text-navy/30'}`}><Smile size={12} /> Emoji</button>
-                          <button onClick={() => setNewMemberAvatarType('upload')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'upload' ? 'bg-stitch text-white shadow-sm' : 'text-navy/30'}`}><Upload size={12} /> Upload</button>
-                          <button onClick={() => setNewMemberAvatarType('random')} className={`flex-1 py-1.5 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'random' ? 'bg-white border text-navy shadow-sm' : 'text-navy/30'}`}><ImageIcon size={12} /> Random</button>
+                          <button onClick={() => setNewMemberAvatarType('emoji')} className={`flex-1 py-1 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'emoji' ? 'bg-donald text-navy shadow-sm' : 'text-navy/30'}`}><Smile size={12} /> Emoji</button>
+                          <button onClick={() => setNewMemberAvatarType('upload')} className={`flex-1 py-1 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'upload' ? 'bg-stitch text-white shadow-sm' : 'text-navy/30'}`}><Upload size={12} /> 上傳</button>
+                          <button onClick={() => setNewMemberAvatarType('random')} className={`flex-1 py-1 rounded-md text-[10px] font-black uppercase flex items-center justify-center gap-1 transition-all ${newMemberAvatarType === 'random' ? 'bg-white border text-navy shadow-sm' : 'text-navy/30'}`}><ImageIcon size={12} /> 隨機</button>
                        </div>
-                       {newMemberAvatarType === 'emoji' && <div className="flex items-center gap-2"><input type="text" maxLength={2} value={newMemberEmoji} onChange={e => setNewMemberEmoji(e.target.value)} className="w-12 h-12 text-center text-2xl bg-white border border-accent rounded-xl focus:ring-2 focus:ring-donald outline-none" /><p className="text-[10px] text-navy/40 font-bold">Pick an emoji!</p></div>}
-                       {newMemberAvatarType === 'upload' && <div className="w-full h-24 border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center cursor-pointer bg-white relative overflow-hidden group hover:border-stitch/50 transition-colors" onClick={() => document.getElementById('setting-avatar-upload')?.click()}>{uploadedAvatar ? <div className="relative w-full h-full group-hover:opacity-90 transition-opacity"><img src={uploadedAvatar} className="w-full h-full object-cover" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"><Camera size={20} className="text-white drop-shadow-md" /></div><button onClick={(e) => { e.stopPropagation(); setUploadedAvatar(''); }} className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-all z-10"><X size={12} strokeWidth={3} /></button></div> : <><Camera size={20} className="text-stitch mb-1" /><span className="text-[10px] font-black text-navy/40 uppercase">Tap to Upload</span></>}<input id="setting-avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" /></div>}
-                       <button onClick={handleMemberSubmit} disabled={!newMemberName.trim()} className="w-full py-3 bg-navy text-white rounded-xl font-black flex items-center justify-center gap-2 disabled:opacity-50 mt-2 hover:bg-navy/90 active:scale-95 transition-all">{editingMemberId ? <><Check size={16} /> Save Changes</> : <><Plus size={16} /> Add Member</>}</button>
+                       {newMemberAvatarType === 'emoji' && <div className="flex items-center gap-2"><input type="text" maxLength={2} value={newMemberEmoji} onChange={e => setNewMemberEmoji(e.target.value)} className="w-10 h-10 text-center text-xl bg-white border border-accent rounded-xl focus:ring-2 focus:ring-donald outline-none" /><p className="text-[10px] text-navy/40 font-bold">選擇一個 Emoji 表情</p></div>}
+                       {newMemberAvatarType === 'upload' && <div className="w-full h-20 border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center cursor-pointer bg-white relative overflow-hidden group hover:border-stitch/50 transition-colors" onClick={() => document.getElementById('setting-avatar-upload')?.click()}>{uploadedAvatar ? <div className="relative w-full h-full group-hover:opacity-90 transition-opacity"><img src={uploadedAvatar} className="w-full h-full object-cover" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20"><Camera size={18} className="text-white drop-shadow-md" /></div><button onClick={(e) => { e.stopPropagation(); setUploadedAvatar(''); }} className="absolute top-1.5 right-1.5 p-1 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 active:scale-95 transition-all z-10"><X size={10} strokeWidth={3} /></button></div> : <><Camera size={18} className="text-stitch mb-0.5" /><span className="text-[10px] font-black text-navy/40 uppercase">點擊上傳頭像</span></>}<input id="setting-avatar-upload" type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" /></div>}
+                       <button onClick={handleMemberSubmit} disabled={!newMemberName.trim()} className="w-full py-2.5 bg-navy text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 mt-1 hover:bg-navy/90 active:scale-95 transition-all">{editingMemberId ? <><Check size={14} /> 儲存成員變更</> : <><Plus size={14} /> 新增成員</>}</button>
                     </div>
                  </div>
                </div>
-               <div className="space-y-4 pt-4 border-t border-accent/40">
-                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em] flex items-center gap-2"><FileJson size={12} /> Data Backup</h4>
-                 <div className="grid grid-cols-2 gap-3">
-                   <button onClick={handleExportData} className="flex flex-col items-center justify-center gap-2 p-4 bg-navy/5 border-2 border-navy/10 rounded-2xl hover:bg-stitch/10 hover:border-stitch/30 transition-colors active:scale-95"><div className="p-2 bg-white rounded-full text-navy shadow-sm"><Download size={18} /></div><span className="text-[10px] font-black uppercase tracking-wider text-navy">Export Trip</span></button>
-                   <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center justify-center gap-2 p-4 bg-donald/10 border-2 border-donald/20 rounded-2xl hover:bg-donald/20 hover:border-donald/40 transition-colors active:scale-95"><div className="p-2 bg-white rounded-full text-navy shadow-sm"><Upload size={18} /></div><span className="text-[10px] font-black uppercase tracking-wider text-navy">Import Trip</span><input type="file" ref={fileInputRef} onChange={handleImportData} accept=".json" className="hidden" /></button>
+               <div className="space-y-3 pt-4 border-t border-accent/40">
+                 <h4 className="text-[10px] font-black uppercase text-navy/40 tracking-[0.2em] flex items-center gap-1.5"><FileJson size={12} /> 資料備份 Data Backup</h4>
+                 <div className="grid grid-cols-2 gap-2.5">
+                   <button onClick={handleExportData} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-navy/5 border border-navy/10 rounded-xl hover:bg-stitch/10 hover:border-stitch/30 transition-colors active:scale-95"><div className="p-1.5 bg-white rounded-full text-navy shadow-xs"><Download size={16} /></div><span className="text-[10px] font-black uppercase tracking-wider text-navy">匯出備份</span></button>
+                   <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center justify-center gap-1.5 p-3 bg-donald/10 border border-donald/20 rounded-xl hover:bg-donald/20 hover:border-donald/40 transition-colors active:scale-95"><div className="p-1.5 bg-white rounded-full text-navy shadow-xs"><Upload size={16} /></div><span className="text-[10px] font-black uppercase tracking-wider text-navy">匯入備份</span><input type="file" ref={fileInputRef} onChange={handleImportData} accept=".json" className="hidden" /></button>
                  </div>
                </div>
             </div>
@@ -594,18 +610,185 @@ const Schedule: React.FC<ScheduleProps> = ({
 };
 
 const AddItemModal: React.FC<{ target: 'pool' | 'schedule'; mode: 'add' | 'edit'; initialData: ScheduleItem | null; duration: number; startDate: string; onClose: () => void; onSave: (item: any) => void }> = ({ target, mode, initialData, duration, startDate, onClose, onSave }) => {
-  const [formData, setFormData] = useState({ dayIndex: initialData?.dayIndex !== undefined ? initialData.dayIndex : (target === 'pool' ? -1 : 0), time: initialData?.time || '10:00', endTime: initialData?.endTime || '', title: initialData?.title || '', location: initialData?.location || '', category: initialData?.category || 'Attraction', notes: initialData?.notes || '', });
+  const [formData, setFormData] = useState({ 
+    dayIndex: initialData?.dayIndex !== undefined ? initialData.dayIndex : (target === 'pool' ? -1 : 0), 
+    time: initialData?.time || '10:00', 
+    endTime: initialData?.endTime || '', 
+    title: initialData?.title || '', 
+    location: initialData?.location || '', 
+    category: initialData?.category || 'Attraction', 
+    notes: initialData?.notes || '', 
+  });
   const [showDetails, setShowDetails] = useState(target === 'schedule' || mode === 'edit'); 
   const categories: Category[] = ['Attraction', 'Restaurant', 'Transport', 'Stay', 'Shopping', 'Other'];
-  const daysOptions = Array.from({ length: duration }, (_, i) => { const d = new Date(startDate); d.setDate(d.getDate() + i); return { index: i, label: `Day ${i + 1} - ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` }; });
+  const daysOptions = Array.from({ length: duration }, (_, i) => { 
+    const d = new Date(startDate); 
+    d.setDate(d.getDate() + i); 
+    return { index: i, label: `Day ${i + 1} - ${d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}` }; 
+  });
 
   return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-cream animate-in slide-in-from-bottom duration-300">
-      <div className="p-4 flex justify-between items-center border-b border-accent bg-paper"><button onClick={onClose} className="text-navy/40 p-2"><X size={24} /></button><h3 className="text-lg font-black text-navy uppercase tracking-widest">{mode === 'add' ? (target === 'pool' ? 'New Idea' : 'Add Stop') : 'Edit Item'}</h3><button onClick={() => onSave(formData)} className="text-stitch font-black p-2" disabled={!formData.location}>DONE</button></div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        <div className="bg-paper p-6 rounded-3xl-sticker border border-accent sticker-shadow"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Where to?</label><div className="flex items-center gap-3"><MapPin size={28} className="text-stitch flex-shrink-0" /><input autoFocus type="text" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="e.g. Tokyo Tower" className="w-full text-2xl font-black bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" /></div><div className="mt-4 pt-4 border-t border-accent/20"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block tracking-widest">Title (Optional)</label><input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Activity Name" className="w-full text-lg font-bold bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/10" /></div></div>
-        <div><label className="text-[10px] font-black uppercase text-navy/30 mb-3 block px-1 tracking-widest">Category</label><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">{categories.map(cat => <button key={cat} onClick={() => setFormData({...formData, category: cat as any})} className={`flex-shrink-0 px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider border-2 transition-all ${formData.category === cat ? 'bg-navy border-navy text-white sticker-shadow scale-105' : 'bg-white border-accent text-navy/40'}`}>{cat}</button>)}</div></div>
-        <div className="space-y-4">{!showDetails && <button onClick={() => setShowDetails(true)} className="w-full py-3 text-xs font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-stitch/5 rounded-xl transition-colors"><Plus size={14} /> Add Time, Day & Notes</button>}{showDetails && <div className="animate-in slide-in-from-top-4 fade-in duration-300 space-y-4"><div className="bg-white p-4 rounded-2xl border border-accent"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Day</label><select value={formData.dayIndex} onChange={e => setFormData({...formData, dayIndex: parseInt(e.target.value)})} className="w-full font-black text-lg bg-transparent border-none p-0 focus:ring-0 text-navy"><option value={-1}>Pool (No Date)</option>{daysOptions.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}</select></div><div className="bg-white p-4 rounded-2xl border border-accent"><label className="text-[10px] font-black uppercase text-navy/30 mb-2 block">Time</label><div className="flex items-center gap-3"><div className="flex-1"><span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">Start</span><input type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0" /></div><ArrowRight size={16} className="text-navy/10 mt-4" /><div className="flex-1"><span className="text-[9px] uppercase text-navy/20 font-bold block mb-1">End</span><input type="time" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full font-black text-xl bg-transparent border-none p-0 focus:ring-0 text-navy/60" /></div></div></div><div className="bg-white p-4 rounded-2xl border border-accent"><label className="text-[10px] font-black uppercase text-navy/30 mb-1 block">Notes</label><textarea rows={3} value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Details..." className="w-full text-sm bg-transparent border-none p-0 focus:ring-0 resize-none font-medium" /></div></div>}</div>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
+      <div 
+        className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex justify-between items-center pb-3 mb-3 border-b border-accent/40">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-stitch/15 text-stitch flex items-center justify-center font-bold">
+              <MapPin size={20} />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-navy uppercase tracking-wider">
+                {mode === 'add' ? (target === 'pool' ? '新增靈感景點' : '新增行程站點') : '編輯行程景點'}
+              </h3>
+              <p className="text-[10px] font-bold text-navy/40">
+                {target === 'pool' ? '放入靈感池待排' : `排入特定天數行程`}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 hover:text-navy transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Scrollable Form Body */}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0">
+          {/* Main Input - Location */}
+          <div className="bg-white p-4 rounded-2xl border border-accent sticker-shadow">
+            <label className="text-[10px] font-black uppercase text-navy/40 mb-1.5 block tracking-wider">地點 / 景點名稱 (必填)</label>
+            <div className="flex items-center gap-2.5">
+              <MapPin size={22} className="text-stitch flex-shrink-0" />
+              <input 
+                autoFocus 
+                type="text" 
+                value={formData.location} 
+                onChange={e => setFormData({...formData, location: e.target.value})} 
+                placeholder="例如：清水寺、心齋橋、東京鐵塔" 
+                className="w-full text-lg font-black bg-transparent border-none p-0 focus:ring-0 text-navy placeholder:text-navy/20" 
+              />
+            </div>
+            <div className="mt-3 pt-3 border-t border-accent/20">
+               <label className="text-[10px] font-black uppercase text-navy/40 mb-1 block tracking-wider">備註標題 (選填)</label>
+               <input 
+                 type="text" 
+                 value={formData.title} 
+                 onChange={e => setFormData({...formData, title: e.target.value})} 
+                 placeholder="活動簡稱 (例如：買伴手禮、拍照)" 
+                 className="w-full text-sm font-bold bg-transparent border-none p-0 focus:ring-0 text-navy/80 placeholder:text-navy/20" 
+               />
+            </div>
+          </div>
+
+          {/* Categories Chips */}
+          <div>
+             <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block px-0.5 tracking-wider">景點類別 Category</label>
+             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setFormData({...formData, category: cat as any})}
+                    className={`flex-shrink-0 px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider border-2 transition-all ${
+                      formData.category === cat 
+                        ? 'bg-navy border-navy text-white sticker-shadow scale-105' 
+                        : 'bg-white border-accent text-navy/50 hover:bg-cream'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+             </div>
+          </div>
+
+          {/* Details toggle */}
+          <div className="space-y-3">
+             {!showDetails && (
+                <button 
+                  type="button"
+                  onClick={() => setShowDetails(true)} 
+                  className="w-full py-2.5 text-xs font-black text-stitch uppercase tracking-widest flex items-center justify-center gap-1.5 hover:bg-stitch/10 bg-stitch/5 rounded-xl transition-colors border border-stitch/20"
+                >
+                   <Plus size={14} /> 設定時間、指定天數與備註
+                </button>
+             )}
+             
+             {showDetails && (
+               <div className="space-y-3 animate-in fade-in duration-200">
+                 <div className="bg-white p-3.5 rounded-2xl border border-accent">
+                   <label className="text-[10px] font-black uppercase text-navy/40 mb-1.5 block">指定天數 Day</label>
+                   <select 
+                     value={formData.dayIndex} 
+                     onChange={e => setFormData({...formData, dayIndex: parseInt(e.target.value)})} 
+                     className="w-full font-black text-sm bg-transparent border-none p-0 focus:ring-0 text-navy cursor-pointer"
+                   >
+                     <option value={-1}>💡 靈感池 Inspiration Pool (無特定日期)</option>
+                     {daysOptions.map(d => (
+                       <option key={d.index} value={d.index}>{d.label}</option>
+                     ))}
+                   </select>
+                 </div>
+
+                 <div className="bg-white p-3.5 rounded-2xl border border-accent">
+                   <label className="text-[10px] font-black uppercase text-navy/40 mb-1.5 block">時間安排 Time</label>
+                   <div className="flex items-center gap-2">
+                     <div className="flex-1">
+                       <span className="text-[9px] uppercase text-navy/30 font-bold block mb-1">開始時間</span>
+                       <input 
+                         type="time" 
+                         value={formData.time} 
+                         onChange={e => setFormData({...formData, time: e.target.value})} 
+                         className="w-full font-black text-base bg-transparent border-none p-0 focus:ring-0 text-navy" 
+                       />
+                     </div>
+                     <ArrowRight size={14} className="text-navy/20 mt-4 shrink-0" />
+                     <div className="flex-1">
+                       <span className="text-[9px] uppercase text-navy/30 font-bold block mb-1">結束時間 (選填)</span>
+                       <input 
+                         type="time" 
+                         value={formData.endTime} 
+                         onChange={e => setFormData({...formData, endTime: e.target.value})} 
+                         className="w-full font-black text-base bg-transparent border-none p-0 focus:ring-0 text-navy/60" 
+                       />
+                     </div>
+                   </div>
+                 </div>
+
+                 <div className="bg-white p-3.5 rounded-2xl border border-accent">
+                   <label className="text-[10px] font-black uppercase text-navy/40 mb-1 block">詳細備註 / 交通資訊</label>
+                   <textarea 
+                     rows={2} 
+                     value={formData.notes} 
+                     onChange={e => setFormData({...formData, notes: e.target.value})} 
+                     placeholder="例如：地鐵御堂筋線、預約號碼、門票已在 Klook 購買..." 
+                     className="w-full text-xs bg-transparent border-none p-0 focus:ring-0 resize-none font-medium text-navy placeholder:text-navy/20" 
+                   />
+                 </div>
+               </div>
+             )}
+          </div>
+        </div>
+
+        {/* Sticky Action Footer */}
+        <div className="pt-3 mt-3 border-t border-accent/40 flex items-center gap-2">
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="flex-1 py-3 bg-cream hover:bg-accent/30 text-navy/60 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
+          >
+            取消
+          </button>
+          <button 
+            type="button" 
+            onClick={() => onSave(formData)} 
+            disabled={!formData.location.trim()} 
+            className="flex-2 py-3 bg-stitch hover:bg-navy text-white font-black rounded-xl text-xs uppercase tracking-widest sticker-shadow active:translate-y-0.5 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5"
+          >
+            <Check size={15} />
+            <span>{mode === 'add' ? '完成新增' : '儲存變更'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

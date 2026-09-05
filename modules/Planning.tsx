@@ -169,54 +169,91 @@ const Planning: React.FC<{ members: TripMember[] }> = ({ members }) => {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-navy/10 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}>
-          <div className="bg-paper w-full max-sm rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-black text-navy uppercase tracking-widest">{modalMode === 'add' ? `Add ${activeTab}` : 'Edit Item'}</h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 bg-cream rounded-full text-navy/40"><X size={20} /></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={() => setIsModalOpen(false)}>
+          <div 
+            className="bg-paper w-full max-w-sm rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95" 
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex justify-between items-center pb-3 mb-4 border-b border-accent/40">
+              <div>
+                <h3 className="text-base font-black text-navy uppercase tracking-wider">
+                  {modalMode === 'add' ? `新增${activeTab === 'Packing' ? '行李清單' : '購物清單'}` : '編輯清單項目'}
+                </h3>
+                <p className="text-[10px] font-bold text-navy/40">為旅程做好萬全準備</p>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)} 
+                className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 hover:text-navy transition-colors"
+              >
+                <X size={18} />
+              </button>
             </div>
             
-            <div className="space-y-6">
-              <div className="bg-cream p-4 rounded-2xl border border-accent">
-                <label className="text-[10px] font-black uppercase text-navy/30 mb-1 block tracking-widest">Item Title</label>
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0">
+              <div className="bg-white p-3.5 rounded-2xl border border-accent">
+                <label className="text-[10px] font-black uppercase text-navy/40 mb-1 block tracking-wider">項目名稱</label>
                 <input 
                   autoFocus
                   type="text" 
                   value={itemTitle}
                   onChange={(e) => setItemTitle(e.target.value)}
-                  placeholder="e.g. Suntan Lotion"
-                  className="w-full bg-transparent border-none p-0 font-black text-navy text-lg focus:ring-0 placeholder:text-navy/10"
+                  placeholder={activeTab === 'Packing' ? '例如：護照、行動電源、防曬乳' : '例如：合利他命、伴手禮盒、吹風機'}
+                  className="w-full bg-transparent border-none p-0 font-black text-navy text-base focus:ring-0 placeholder:text-navy/20"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-black uppercase text-navy/30 mb-3 block px-1 tracking-widest">Assign To</label>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block px-0.5 tracking-wider">指派成員 Assign To</label>
+                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
                   <button 
+                    type="button"
                     onClick={() => setItemAssignee('All')}
-                    className={`flex-shrink-0 px-4 py-2 rounded-full font-black text-[10px] border-2 uppercase tracking-tighter transition-all ${itemAssignee === 'All' ? 'bg-navy border-navy text-white' : 'bg-white border-accent text-navy/30'}`}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-xl font-black text-[10px] border uppercase transition-all ${
+                      itemAssignee === 'All' 
+                        ? 'bg-navy border-navy text-white sticker-shadow' 
+                        : 'bg-white border-accent text-navy/60 hover:bg-cream'
+                    }`}
                   >
-                    Everyone
+                    👥 全員 Everyone
                   </button>
                   {members.map(m => (
                     <button 
                       key={m.id}
+                      type="button"
                       onClick={() => setItemAssignee(m.id)}
-                      className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full font-black text-[10px] border-2 uppercase transition-all ${itemAssignee === m.id ? 'bg-stitch border-stitch text-white' : 'bg-white border-accent text-navy/30'}`}
+                      className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-black text-[10px] border uppercase transition-all ${
+                        itemAssignee === m.id 
+                          ? 'bg-stitch border-stitch text-white sticker-shadow' 
+                          : 'bg-white border-accent text-navy/60 hover:bg-cream'
+                      }`}
                     >
-                      <img src={m.avatar} className="w-4 h-4 rounded-full" />
-                      {m.name}
+                      <img src={m.avatar} className="w-4 h-4 rounded-full object-cover" alt={m.name} />
+                      <span>{m.name}</span>
                     </button>
                   ))}
                 </div>
               </div>
+            </div>
 
+            {/* Sticky Action Footer */}
+            <div className="pt-3 mt-3 border-t border-accent/40 flex items-center gap-2">
               <button 
+                type="button" 
+                onClick={() => setIsModalOpen(false)} 
+                className="flex-1 py-3 bg-cream hover:bg-accent/30 text-navy/60 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                type="button"
                 onClick={handleSave}
                 disabled={!itemTitle.trim()}
-                className="w-full py-4 bg-navy text-white font-black rounded-xl-sticker sticker-shadow active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none uppercase text-xs tracking-widest"
+                className="flex-2 py-3 bg-stitch hover:bg-navy text-white font-black rounded-xl text-xs uppercase tracking-widest sticker-shadow active:translate-y-0.5 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5"
               >
-                {modalMode === 'add' ? 'ADD TO LIST' : 'SAVE CHANGES'}
+                <Check size={16} />
+                <span>{modalMode === 'add' ? '確認新增' : '儲存變更'}</span>
               </button>
             </div>
           </div>

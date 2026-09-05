@@ -9,20 +9,24 @@ import {
   RefreshCw,
   Compass,
   CheckCircle2,
-  Plus
+  Plus,
+  Download
 } from 'lucide-react';
 import { MOCK_MEMBERS, MOCK_TRIP_CONFIG } from './constants.ts';
-import { TripMember, TripConfig, Trip } from './types.ts';
+import { TripMember, TripConfig, Trip, GoogleAuthUser } from './types.ts';
 import Schedule from './modules/Schedule.tsx';
 import Bookings from './modules/Bookings.tsx';
 import Expense from './modules/Expense.tsx';
 import Planning from './modules/Planning.tsx';
 import TripManagerModal from './modules/TripManagerModal.tsx';
+import { FullTripExportImportModal } from './modules/FullTripExportImportModal.tsx';
+import { GoogleAuthModal } from './modules/GoogleAuthModal.tsx';
 import { 
   saveTripToFirebase, 
   fetchTripsFromFirebase, 
   deleteTripFromFirebase, 
-  subscribeToTrips 
+  subscribeToTrips,
+  subscribeToAuth
 } from './firebase.ts';
 
 type Tab = 'schedule' | 'bookings' | 'expense' | 'planning';
@@ -137,6 +141,9 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [showSaveToast, setShowSaveToast] = useState<boolean>(false);
   const [isTripManagerOpen, setIsTripManagerOpen] = useState<boolean>(false);
+  const [isFullExportModalOpen, setIsFullExportModalOpen] = useState<boolean>(false);
+  const [isGoogleAuthModalOpen, setIsGoogleAuthModalOpen] = useState<boolean>(false);
+  const [googleUser, setGoogleUser] = useState<GoogleAuthUser | null>(null);
 
   // Active trip derived helper
   const currentTrip = trips.find(t => t.id === currentTripId) || trips[0] || createDefaultTrip();
@@ -548,6 +555,99 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [currentTripId, trips]);
 
+  // Subscribe to Google Auth changes
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth((user) => {
+      if (user && !user.isAnonymous) {
+        const gUser: GoogleAuthUser = {
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || user.email?.split('@')[0] || 'Google User',
+          photoURL: user.photoURL || undefined,
+          lastLoginAt: new Date().toISOString()
+        };
+        setGoogleUser(gUser);
+      } else {
+        setGoogleUser(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Import full trip from backup file (JSON or CSV)
+  const handleImportTrip = async (importedTrip: Trip, mode: 'new' | 'overwrite') => {
+    setIsSyncing(true);
+    try {
+      const capturedCurrent = captureCurrentTripData(currentTripId);
+      const targetId = mode === 'overwrite' ? currentTripId : `trip_${Date.now()}`;
+      const tripToSave: Trip = {
+        ...importedTrip,
+        id: targetId,
+        updatedAt: new Date().toISOString()
+      };
+
+      let updatedTrips: Trip[];
+      if (mode === 'overwrite') {
+        updatedTrips = trips.map(t => t.id === currentTripId ? tripToSave : t);
+      } else {
+        updatedTrips = [tripToSave, ...trips.map(t => t.id === currentTripId ? capturedCurrent : t)];
+      }
+
+      // Write target trip data to submodules' localStorage keys
+      const newConfig: TripConfig = {
+        tripName: tripToSave.tripName,
+        region: tripToSave.region,
+        startDate: tripToSave.startDate,
+        duration: tripToSave.duration,
+        coverEmoji: tripToSave.coverEmoji || '✈️'
+      };
+
+      localStorage.setItem('tripConfig', JSON.stringify(newConfig));
+      localStorage.setItem('itinerary', JSON.stringify(tripToSave.itinerary || []));
+      localStorage.setItem('inspiration_pool', JSON.stringify(tripToSave.pool || []));
+      localStorage.setItem('bookings', JSON.stringify(tripToSave.bookings || []));
+      localStorage.setItem('expenses', JSON.stringify(tripToSave.expenses || []));
+      localStorage.setItem('planning_items', JSON.stringify(tripToSave.planningItems || []));
+      localStorage.setItem('trip_members', JSON.stringify(tripToSave.members || MOCK_MEMBERS));
+      localStorage.setItem('ohana_current_trip_id', tripToSave.id);
+      localStorage.setItem('ohana_all_trips', JSON.stringify(updatedTrips));
+
+      // Update parent state
+      setTrips(updatedTrips);
+      setCurrentTripId(tripToSave.id);
+      setTripConfig(newConfig);
+      setMembers(tripToSave.members || MOCK_MEMBERS);
+      setCurrentUser((tripToSave.members && tripToSave.members[0]) || members[0]);
+      setTripVersion(v => v + 1);
+
+      await saveTripToFirebase(tripToSave);
+      setShowSaveToast(true);
+      setTimeout(() => setShowSaveToast(false), 3000);
+      setLastSync(new Date().toLocaleTimeString());
+    } catch (e) {
+      console.error("Failed to import trip:", e);
+      alert("匯入旅程時發生錯誤，請檢查檔案格式！");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Add Google user as a trip member
+  const handleAddMemberFromGoogle = (member: TripMember) => {
+    const existing = members.find(m => m.name.toLowerCase() === member.name.toLowerCase());
+    if (existing) {
+      setCurrentUser(existing);
+      localStorage.setItem('currentUser', JSON.stringify(existing));
+      return;
+    }
+    const updated = [...members, member];
+    setMembers(updated);
+    localStorage.setItem('trip_members', JSON.stringify(updated));
+    setCurrentUser(member);
+    localStorage.setItem('currentUser', JSON.stringify(member));
+    handleUpdateTrip(currentTripId, { members: updated });
+  };
+
   const handleSwitchUser = (user: TripMember) => {
     setCurrentUser(user);
     localStorage.setItem('currentUser', JSON.stringify(user));
@@ -605,6 +705,7 @@ const App: React.FC = () => {
           onDeleteMember={handleDeleteMember}
           onSwitchUser={handleSwitchUser}
           onNavigate={handleNavigate}
+          onOpenFullExport={() => setIsFullExportModalOpen(true)}
         />
       );
       case 'bookings': return (
@@ -641,6 +742,7 @@ const App: React.FC = () => {
           onDeleteMember={handleDeleteMember}
           onSwitchUser={handleSwitchUser}
           onNavigate={handleNavigate}
+          onOpenFullExport={() => setIsFullExportModalOpen(true)}
         />
       );
     }
@@ -648,31 +750,79 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen max-w-md mx-auto bg-cream shadow-2xl relative overflow-hidden font-sans">
-      {/* Top Header Bar with Trip Switcher & Cloud Storage Sync */}
-      <header className="absolute top-0 left-0 right-0 z-[60] px-3 py-2 flex justify-between items-center bg-paper/90 backdrop-blur-md border-b border-accent/40 shadow-sm">
+      {/* Top Header Bar with Trip Switcher, Backup/Export, Gmail Login, and Cloud Sync */}
+      <header className="absolute top-0 left-0 right-0 z-[60] px-3 py-2 flex justify-between items-center bg-paper/90 backdrop-blur-md border-b border-accent/40 shadow-sm gap-1.5">
         {/* Active Trip Button / Switcher */}
         <button 
           onClick={() => setIsTripManagerOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1 bg-white border border-stitch/30 hover:border-stitch rounded-full sticker-shadow text-navy transition-all active:scale-95 group max-w-[65%]"
+          className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-stitch/30 hover:border-stitch rounded-full sticker-shadow text-navy transition-all active:scale-95 group max-w-[42%]"
           title="點擊切換或新增旅程"
         >
           <span className="text-sm">{currentTrip.coverEmoji || '✈️'}</span>
-          <span className="text-xs font-black truncate max-w-[130px] group-hover:text-stitch transition-colors">
+          <span className="text-xs font-black truncate group-hover:text-stitch transition-colors">
             {currentTrip.tripName || '我的旅程'}
           </span>
           <ChevronDown size={14} className="text-stitch group-hover:translate-y-0.5 transition-transform flex-shrink-0" />
         </button>
 
-        {/* Cloud Sync Status & Manual Save Button */}
-        <div className="flex items-center gap-1.5">
+        {/* Action Controls: Backup/Export + Google Login + Cloud Sync */}
+        <div className="flex items-center gap-1">
+          {/* Direct Backup / Export Button */}
+          <button
+            onClick={() => setIsFullExportModalOpen(true)}
+            className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-donald/20 border border-accent/70 rounded-full text-[10px] font-black text-navy transition-all active:scale-95 sticker-shadow"
+            title="匯出 / 匯入完整旅程備份檔 (JSON / CSV)"
+          >
+            <Download size={12} className="text-stitch" />
+            <span className="hidden sm:inline">備份</span>
+          </button>
+
+          {/* Google Auth / Gmail Login Pill */}
+          <button
+            onClick={() => setIsGoogleAuthModalOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 border rounded-full text-[10px] font-black transition-all active:scale-95 sticker-shadow ${
+              googleUser 
+                ? 'bg-white border-stitch/30 text-navy hover:border-stitch' 
+                : 'bg-white hover:bg-cream border-accent text-navy/70'
+            }`}
+            title={googleUser ? `已登入：${googleUser.email} (點擊查看登入紀錄)` : '點擊進行 Google / Gmail 登入並記錄登入歷史'}
+          >
+            {googleUser ? (
+              <>
+                {googleUser.photoURL ? (
+                  <img src={googleUser.photoURL} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
+                ) : (
+                  <div className="w-3.5 h-3.5 rounded-full bg-stitch text-white text-[8px] flex items-center justify-center font-bold">
+                    {googleUser.displayName?.charAt(0) || 'G'}
+                  </div>
+                )}
+                <span className="truncate max-w-[55px] font-black text-navy">
+                  {googleUser.displayName?.split(' ')[0] || 'Google'}
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              </>
+            ) : (
+              <>
+                <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Gmail登入</span>
+              </>
+            )}
+          </button>
+
+          {/* Cloud Sync Status & Manual Save Button */}
           <button
             onClick={handleForceSave}
             disabled={isSyncing}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-stitch hover:text-white border border-accent/60 rounded-full text-[10px] font-black text-navy/70 transition-all active:scale-95 sticker-shadow"
+            className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-stitch hover:text-white border border-accent/60 rounded-full text-[10px] font-black text-navy/70 transition-all active:scale-95 sticker-shadow"
             title="點擊立即儲存至 Firebase 雲端"
           >
-            <Cloud size={13} className={isSyncing ? 'animate-bounce text-amber-500' : 'text-green-500'} />
-            <span>{isSyncing ? '儲存中...' : '儲存雲端'}</span>
+            <Cloud size={12} className={isSyncing ? 'animate-bounce text-amber-500' : 'text-green-500'} />
+            <span className="hidden sm:inline">{isSyncing ? '同步中' : '存檔'}</span>
           </button>
         </div>
       </header>
@@ -713,6 +863,29 @@ const App: React.FC = () => {
           isSyncing={isSyncing}
           lastSyncTime={lastSync}
           onOpenFullExport={() => setIsFullExportModalOpen(true)}
+        />
+      )}
+
+      {/* Full Trip Export / Import Modal (JSON & CSV 雙向匯出匯入) */}
+      {isFullExportModalOpen && (
+        <FullTripExportImportModal 
+          currentTrip={captureCurrentTripData(currentTripId)}
+          allTrips={trips}
+          onClose={() => setIsFullExportModalOpen(false)}
+          onImportTrip={handleImportTrip}
+          onForceSaveCloud={handleForceSave}
+          isSyncing={isSyncing}
+        />
+      )}
+
+      {/* Google Auth / Gmail Login Modal */}
+      {isGoogleAuthModalOpen && (
+        <GoogleAuthModal 
+          currentUser={googleUser}
+          onClose={() => setIsGoogleAuthModalOpen(false)}
+          onAddMemberFromGoogle={handleAddMemberFromGoogle}
+          onForceSync={handleForceSave}
+          isSyncing={isSyncing}
         />
       )}
     </div>

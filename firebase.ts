@@ -1,5 +1,13 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, signInAnonymously, onAuthStateChanged, User } from "firebase/auth";
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  onAuthStateChanged, 
+  User 
+} from "firebase/auth";
 import { 
   getFirestore, 
   collection, 
@@ -15,7 +23,7 @@ import {
   Firestore
 } from "firebase/firestore";
 import firebaseConfigJson from "./firebase-applet-config.json";
-import { Trip } from "./types.ts";
+import { Trip, LoginAuditRecord } from "./types.ts";
 
 // Fallback configuration supporting Vite environment or JSON config
 const firebaseConfig = {
@@ -40,15 +48,85 @@ const databaseId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.
 
 const db: Firestore = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
 
-// Anonymous sign in for zero-friction collaboration
-let currentFirebaseUser: User | null = null;
+// Anonymous sign in fallback for zero-friction collaboration if not logged in
 onAuthStateChanged(auth, (user) => {
-  currentFirebaseUser = user;
+  if (!user) {
+    signInAnonymously(auth).catch((err) => {
+      console.warn("Firebase anonymous auth fallback:", err.message);
+    });
+  }
 });
 
-signInAnonymously(auth).catch((err) => {
-  console.warn("Firebase anonymous auth fallback:", err.message);
-});
+// Google Authentication
+export async function signInWithGoogle(): Promise<User> {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  const result = await signInWithPopup(auth, provider);
+  if (result.user) {
+    await recordUserLogin(result.user);
+  }
+  return result.user;
+}
+
+export async function signOutGoogle(): Promise<void> {
+  await signOut(auth);
+  try {
+    await signInAnonymously(auth);
+  } catch (e) {
+    console.warn("Anonymous auth re-connect note:", e);
+  }
+}
+
+export async function recordUserLogin(user: User): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    // 1. Update user profile document
+    const userRef = doc(db, 'users', user.uid);
+    await setDoc(userRef, {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || user.email?.split('@')[0] || 'Google User',
+      photoURL: user.photoURL || '',
+      lastLoginAt: now
+    }, { merge: true });
+
+    // 2. Add an audit log entry
+    const recordId = `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const logRef = doc(db, 'login_records', recordId);
+    await setDoc(logRef, {
+      id: recordId,
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || '',
+      timestamp: now,
+      userAgent: navigator.userAgent
+    });
+  } catch (err) {
+    console.warn("Could not write login record to Firestore:", err);
+  }
+}
+
+export async function fetchLoginRecords(uid?: string): Promise<LoginAuditRecord[]> {
+  try {
+    const col = collection(db, 'login_records');
+    const snapshot = await getDocs(col);
+    const logs: LoginAuditRecord[] = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data() as LoginAuditRecord;
+      if (!uid || data.uid === uid) {
+        logs.push(data);
+      }
+    });
+    return logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || '')).slice(0, 20);
+  } catch (e) {
+    console.warn("Could not fetch login records:", e);
+    return [];
+  }
+}
+
+export function subscribeToAuth(callback: (user: User | null) => void): () => void {
+  return onAuthStateChanged(auth, callback);
+}
 
 // Test connection on boot per Firebase guidelines
 async function testConnection() {

@@ -105,9 +105,9 @@ const TripManagerModal: React.FC<TripManagerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-navy/30 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
       <div 
-        className="bg-paper w-full max-w-md rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[88vh] overflow-hidden animate-in zoom-in-95"
+        className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

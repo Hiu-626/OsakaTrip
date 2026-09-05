@@ -29,6 +29,14 @@
           "type": "string",
           "description": "User ID of the trip creator"
         },
+        "ownerEmail": {
+          "type": "string",
+          "description": "Gmail/Email of the trip creator"
+        },
+        "lastEditedByEmail": {
+          "type": "string",
+          "description": "Gmail/Email of the last user who edited the trip"
+        },
         "createdAt": {
           "type": "string",
           "description": "Creation timestamp in ISO format"
@@ -39,12 +47,80 @@
         }
       },
       "required": ["id", "tripName", "startDate", "duration"]
+    },
+    "UserRecord": {
+      "title": "UserRecord",
+      "description": "Stores user login activity and profile details from Google Auth",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user UID"
+        },
+        "email": {
+          "type": "string",
+          "description": "Gmail address of the user"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar photo URL of the user"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "Last login timestamp in ISO format"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account registration timestamp in ISO format"
+        }
+      },
+      "required": ["uid", "email", "lastLoginAt"]
+    },
+    "LoginRecord": {
+      "title": "LoginRecord",
+      "description": "Audit trail log of user login events",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "User UID"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of login event"
+        },
+        "userAgent": {
+          "type": "string",
+          "description": "Browser user agent info"
+        }
+      },
+      "required": ["uid", "email", "timestamp"]
     }
   },
   "firestore": {
     "/trips/{tripId}": {
       "schema": "Trip",
       "description": "Collection of all trips with itinerary, expenses, bookings, and planning items"
+    },
+    "/users/{userId}": {
+      "schema": "UserRecord",
+      "description": "Collection of registered Google users and their profile details"
+    },
+    "/login_records/{recordId}": {
+      "schema": "LoginRecord",
+      "description": "Collection of user sign-in audit logs"
     }
   }
 }

@@ -69,6 +69,9 @@ export interface Trip {
   coverEmoji?: string;
   createdAt: string;
   updatedAt: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  lastEditedByEmail?: string;
   members: TripMember[];
   itinerary: ScheduleItem[];
   pool: ScheduleItem[];
@@ -80,6 +83,23 @@ export interface Trip {
     displayCurrency: string;
     rates?: Record<string, number>;
   };
+}
+
+export interface GoogleAuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  lastLoginAt: string;
+}
+
+export interface LoginAuditRecord {
+  id: string;
+  uid: string;
+  email: string;
+  displayName?: string;
+  timestamp: string;
+  userAgent?: string;
 }
 
 export interface JournalPost {

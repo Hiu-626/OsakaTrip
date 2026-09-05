@@ -16,7 +16,9 @@ import {
   Sparkles, 
   Copy,
   ChevronRight,
-  Info
+  Info,
+  ExternalLink,
+  Eye
 } from 'lucide-react';
 import { Trip, ScheduleItem, Booking, Expense, PlanningItem, TripMember, TripConfig } from '../types.ts';
 
@@ -40,6 +42,9 @@ export const FullTripExportImportModal: React.FC<FullTripExportImportModalProps>
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
   const [exportFormat, setExportFormat] = useState<'json' | 'csv'>('json');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showJSONPreview, setShowJSONPreview] = useState<boolean>(false);
+  const [copiedType, setCopiedType] = useState<'json' | 'csv' | null>(null);
+  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   // Import State
   const [importedTripData, setImportedTripData] = useState<Trip | null>(null);
@@ -136,25 +141,130 @@ export const FullTripExportImportModal: React.FC<FullTripExportImportModalProps>
     };
   };
 
+  // Robust download helper that supports Blob URL and Data URI fallback
+  const triggerDownload = (filename: string, content: string, mimeType: string): boolean => {
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 30000);
+      return true;
+    } catch (e) {
+      console.warn("Blob URL download failed, trying data URI fallback:", e);
+      try {
+        const dataUri = `data:${mimeType};charset=utf-8,` + encodeURIComponent(content);
+        const link = document.createElement("a");
+        link.href = dataUri;
+        link.download = filename;
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (link.parentNode) link.parentNode.removeChild(link);
+        }, 3000);
+        return true;
+      } catch (err2) {
+        console.error("All direct download mechanisms failed:", err2);
+        return false;
+      }
+    }
+  };
+
+  // Copy JSON to clipboard directly
+  const handleCopyJSON = () => {
+    const liveData = getLiveTripData();
+    const jsonStr = JSON.stringify(liveData, null, 2);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(jsonStr)
+        .then(() => {
+          setCopiedType('json');
+          showToast("✅ 已成功複製完整旅程 JSON 至剪貼簿！");
+          setTimeout(() => setCopiedType(null), 3000);
+        })
+        .catch(() => {
+          fallbackCopyText(jsonStr, 'json');
+        });
+    } else {
+      fallbackCopyText(jsonStr, 'json');
+    }
+  };
+
+  // Copy Comprehensive CSV to clipboard
+  const handleCopyCSV = () => {
+    const live = getLiveTripData();
+    let csv = generateCSVContent(live);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(csv)
+        .then(() => {
+          setCopiedType('csv');
+          showToast("✅ 已成功複製 CSV 表格文字至剪貼簿！");
+          setTimeout(() => setCopiedType(null), 3000);
+        })
+        .catch(() => {
+          fallbackCopyText(csv, 'csv');
+        });
+    } else {
+      fallbackCopyText(csv, 'csv');
+    }
+  };
+
+  const fallbackCopyText = (text: string, type: 'json' | 'csv') => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      setCopiedType(type);
+      showToast(`✅ 已成功複製完整 ${type.toUpperCase()} 內容至剪貼簿！`);
+      setTimeout(() => setCopiedType(null), 3000);
+    } catch (e) {
+      showToast("複製失敗，請點選「預覽原始碼」手動全選複製。");
+    }
+    document.body.removeChild(textarea);
+  };
+
+  // Open JSON in new browser tab / window
+  const handleOpenJSONInNewTab = () => {
+    try {
+      const liveData = getLiveTripData();
+      const jsonStr = JSON.stringify(liveData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      showToast("已在新分頁開啟 JSON！可在該頁面按 Ctrl+S / Cmd+S 另存新檔。");
+    } catch (e) {
+      handleCopyJSON();
+    }
+  };
+
   // Export Full JSON Backup
   const handleExportJSON = () => {
     const liveData = getLiveTripData();
     const jsonStr = JSON.stringify(liveData, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
     const safeName = (liveData.tripName || 'OhanaTrip').replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${safeName}_FullBackup_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("成功匯出完整旅程 JSON 備份檔！");
+    const filename = `${safeName}_FullBackup_${new Date().toISOString().split('T')[0]}.json`;
+    const ok = triggerDownload(filename, jsonStr, 'application/json;charset=utf-8;');
+    if (ok) {
+      showToast("📥 已觸發 JSON 備份檔下載！如瀏覽器攔截請使用「一鍵複製」。");
+    } else {
+      handleCopyJSON();
+    }
   };
 
-  // Export Comprehensive Multi-Section CSV Report
-  const handleExportComprehensiveCSV = () => {
-    const live = getLiveTripData();
+  // Generate Comprehensive Multi-Section CSV String
+  const generateCSVContent = (live: Trip): string => {
     let csv = "\ufeff"; // UTF-8 BOM for Excel Chinese/Cantonese characters
 
     // 1. Trip Overview Section
@@ -244,17 +354,21 @@ export const FullTripExportImportModal: React.FC<FullTripExportImportModalProps>
     if ((live.planningItems || []).length === 0) {
       csv += "無清單項目\n";
     }
+    return csv;
+  };
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+  // Export Comprehensive Multi-Section CSV Report
+  const handleExportComprehensiveCSV = () => {
+    const live = getLiveTripData();
+    const csv = generateCSVContent(live);
     const safeName = (live.tripName || 'OhanaTrip').replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${safeName}_綜合總表_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("成功匯出涵蓋行程、票券、記帳、清單的綜合總表 CSV！");
+    const filename = `${safeName}_綜合總表_${new Date().toISOString().split('T')[0]}.csv`;
+    const ok = triggerDownload(filename, csv, 'text/csv;charset=utf-8;');
+    if (ok) {
+      showToast("📥 已觸發 CSV 綜合總表下載！若瀏覽器攔截請使用「一鍵複製 CSV」。");
+    } else {
+      handleCopyCSV();
+    }
   };
 
   // Robust RFC 4180 CSV Parser
@@ -548,9 +662,9 @@ export const FullTripExportImportModal: React.FC<FullTripExportImportModalProps>
   const liveTrip = getLiveTripData();
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-navy/40 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
       <div 
-        className="bg-paper w-full max-w-md rounded-3xl-sticker p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95"
+        className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -634,54 +748,110 @@ export const FullTripExportImportModal: React.FC<FullTripExportImportModalProps>
               </div>
 
               {/* Export Format Cards */}
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 <label className="text-[10px] font-black uppercase tracking-wider text-navy/40 block">
-                  選擇匯出格式 (Export Format)
+                  選擇匯出方式 (Export Options)
                 </label>
 
-                {/* Option 1: Full JSON Backup */}
-                <button
-                  type="button"
-                  onClick={handleExportJSON}
-                  className="w-full p-4 rounded-2xl bg-white border-2 border-stitch/30 hover:border-stitch text-left transition-all active:scale-[0.99] sticker-shadow group"
-                >
+                {/* Option 1: Full JSON Backup Card */}
+                <div className="p-4 rounded-2xl bg-white border-2 border-stitch/30 hover:border-stitch transition-all sticker-shadow space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-stitch/10 text-stitch flex items-center justify-center font-black">
+                      <div className="w-10 h-10 rounded-xl bg-stitch/10 text-stitch flex items-center justify-center font-black shrink-0">
                         <FileJson size={22} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-black text-navy group-hover:text-stitch transition-colors">
+                          <h4 className="text-sm font-black text-navy">
                             完整旅程備份檔 (.json)
                           </h4>
                           <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-black rounded-md uppercase">
-                            推薦
+                            推薦首選
                           </span>
                         </div>
                         <p className="text-[10px] font-bold text-navy/40 mt-0.5">
-                          最完整無損！包含天數、票券代碼、分帳名冊，可 100% 還原至任何裝置。
+                          最完整無損！天數、票券代碼、分帳名冊，可 100% 還原至任何裝置。
                         </p>
                       </div>
                     </div>
-                    <Download size={16} className="text-stitch shrink-0 mt-1 group-hover:translate-y-0.5 transition-transform" />
                   </div>
-                </button>
+
+                  {/* Action Buttons for JSON */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-accent/30">
+                    <button
+                      type="button"
+                      onClick={handleExportJSON}
+                      className="py-2.5 px-3 rounded-xl bg-stitch text-white hover:bg-navy text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 sticker-shadow"
+                    >
+                      <Download size={14} />
+                      <span>下載 JSON 檔</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyJSON}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                        copiedType === 'json'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : 'bg-white hover:bg-cream/60 border-stitch/30 text-stitch'
+                      }`}
+                    >
+                      <Copy size={14} />
+                      <span>{copiedType === 'json' ? '已複製 JSON！' : '一鍵複製 JSON'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 text-[10px] font-bold text-navy/50">
+                    <button
+                      type="button"
+                      onClick={handleOpenJSONInNewTab}
+                      className="hover:text-stitch flex items-center gap-1 transition-colors"
+                      title="在新分頁檢視 JSON，可直接 Ctrl+S / Cmd+S 另存"
+                    >
+                      <ExternalLink size={12} />
+                      <span>在新分頁開啟 / 另存</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowJSONPreview(!showJSONPreview)}
+                      className="hover:text-stitch flex items-center gap-1 transition-colors"
+                    >
+                      <Eye size={12} />
+                      <span>{showJSONPreview ? '收起預覽' : '預覽代碼'}</span>
+                    </button>
+                  </div>
+
+                  {/* Collapsible JSON Preview */}
+                  {showJSONPreview && (
+                    <div className="mt-2 p-3 bg-navy/95 text-emerald-300 rounded-xl font-mono text-[10px] max-h-48 overflow-y-auto space-y-2 animate-in fade-in">
+                      <div className="flex justify-between items-center text-white/60 pb-1 border-b border-white/10">
+                        <span>預覽 JSON 內容 ({JSON.stringify(getLiveTripData()).length} 位元組)</span>
+                        <button
+                          type="button"
+                          onClick={handleCopyJSON}
+                          className="px-2 py-0.5 bg-white/10 hover:bg-white/20 rounded text-[9px] text-white"
+                        >
+                          全選複製
+                        </button>
+                      </div>
+                      <pre className="whitespace-pre-wrap break-all select-all">
+                        {JSON.stringify(getLiveTripData(), null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
 
                 {/* Option 2: Comprehensive Multi-Section CSV */}
-                <button
-                  type="button"
-                  onClick={handleExportComprehensiveCSV}
-                  className="w-full p-4 rounded-2xl bg-white border-2 border-accent/70 hover:border-donald text-left transition-all active:scale-[0.99] sticker-shadow group"
-                >
+                <div className="p-4 rounded-2xl bg-white border-2 border-accent/70 hover:border-donald transition-all sticker-shadow space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-donald/20 text-navy flex items-center justify-center font-black">
+                      <div className="w-10 h-10 rounded-xl bg-donald/20 text-navy flex items-center justify-center font-black shrink-0">
                         <FileSpreadsheet size={22} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-black text-navy group-hover:text-stitch transition-colors">
+                          <h4 className="text-sm font-black text-navy">
                             全方位綜合總表 (.csv)
                           </h4>
                           <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-black rounded-md uppercase">
@@ -689,13 +859,47 @@ export const FullTripExportImportModal: React.FC<FullTripExportImportModalProps>
                           </span>
                         </div>
                         <p className="text-[10px] font-bold text-navy/40 mt-0.5">
-                          UTF-8 BOM 格式，分區整合行程天數、所有票券、全部分帳與行李清單。
+                          UTF-8 BOM 格式，整合行程天數、所有票券、全部分帳與清單。
                         </p>
                       </div>
                     </div>
-                    <Download size={16} className="text-navy/40 group-hover:text-stitch shrink-0 mt-1 group-hover:translate-y-0.5 transition-transform" />
                   </div>
-                </button>
+
+                  {/* Action Buttons for CSV */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-accent/30">
+                    <button
+                      type="button"
+                      onClick={handleExportComprehensiveCSV}
+                      className="py-2.5 px-3 rounded-xl bg-navy text-white hover:bg-stitch text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 sticker-shadow"
+                    >
+                      <Download size={14} />
+                      <span>下載 CSV 檔</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyCSV}
+                      className={`py-2.5 px-3 rounded-xl border text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                        copiedType === 'csv'
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : 'bg-white hover:bg-cream/60 border-accent/70 text-navy'
+                      }`}
+                    >
+                      <Copy size={14} />
+                      <span>{copiedType === 'csv' ? '已複製 CSV！' : '一鍵複製 CSV'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Helpful note for iframe environment */}
+                {isIframe && (
+                  <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-[10px] font-bold text-amber-900 leading-relaxed flex items-start gap-2">
+                    <Info size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      提示：因瀏覽器安全性限制，若在預覽中點擊「下載」無反應，請點選<strong>「一鍵複製 JSON」</strong>或<strong>「在新分頁開啟」</strong>另存檔案，即可 100% 完整備份！
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Cloud Quick Sync reminder */}

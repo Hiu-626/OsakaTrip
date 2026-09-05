@@ -23,7 +23,8 @@ import {
   ChevronUp,
   ChevronDown,
   Download,
-  Link
+  Link,
+  Check
 } from 'lucide-react';
 import { Booking, TripMember, ScheduleItem } from '../types.ts';
 import { GoogleGenAI } from "@google/genai";
@@ -408,41 +409,143 @@ const BookingFormModal: React.FC<{ initialData: Booking | null; members: TripMem
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-cream/95 backdrop-blur-md animate-in slide-in-from-bottom duration-300">
-      <div className="p-4 flex justify-between items-center border-b border-accent bg-paper">
-        <button onClick={onClose} className="text-navy/40 p-2"><X size={24} /></button>
-        <h3 className="text-lg font-black text-navy uppercase tracking-widest">{initialData ? 'Edit Ticket' : 'New Ticket'}</h3>
-        <button onClick={() => onSave(formData as Booking)} className="text-stitch font-black p-2" disabled={!formData.title}>DONE</button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-20">
-        <div className="w-full aspect-[21/9] bg-white rounded-2xl-sticker border-2 border-dashed border-accent flex flex-col items-center justify-center relative overflow-hidden cursor-pointer" onClick={() => document.getElementById('imageInput')?.click()}>
-          {imagePreview ? (
-            <div className="relative w-full h-full"><img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /><button onClick={(e) => { e.stopPropagation(); setImagePreview(''); }} className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full"><X size={14} /></button>{isScanning && <div className="absolute inset-0 bg-navy/60 backdrop-blur-sm flex items-center justify-center text-white"><Wand2 className="animate-pulse" /></div>}</div>
-          ) : (
-            <div className="flex flex-col items-center text-navy/20"><Camera size={40} /><p className="text-[10px] font-black uppercase">Snap Ticket</p></div>
-          )}
-          <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-        </div>
-        <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow">
-          <label className="text-[10px] font-black uppercase text-navy/40 mb-3 block">Category</label>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {types.map(t => (
-              <button key={t} onClick={() => setFormData({ ...formData, type: t })} className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] font-black uppercase transition-all ${formData.type === t ? 'bg-navy text-white' : 'bg-accent/20'}`}>{t}</button>
-            ))}
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
+      <div 
+        className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header (Pinned) */}
+        <div className="flex justify-between items-center pb-3 mb-3 border-b border-accent/40">
+          <div className="flex items-center gap-2">
+            <span className="p-2 bg-stitch/15 text-stitch rounded-xl font-bold">
+              <TicketIcon size={18} />
+            </span>
+            <div>
+              <h3 className="text-base font-black text-navy uppercase tracking-wider">
+                {initialData ? '編輯票券憑證' : '新增票券 / 預訂'}
+              </h3>
+              <p className="text-[10px] font-bold text-navy/40">保存機票、飯店確認信或門票</p>
+            </div>
           </div>
+          <button onClick={onClose} className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 hover:text-navy transition-colors">
+            <X size={18} />
+          </button>
         </div>
-        <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow space-y-4">
-          <div><label className="text-[10px] font-black uppercase text-navy/40 mb-1 block">Title</label><input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} placeholder="e.g. Disney Ticket" className="w-full text-xl font-black text-navy bg-transparent border-none p-0 focus:ring-0" /></div>
-          <div><label className="text-[10px] font-black uppercase text-navy/40 mb-1 block">Ref No</label><input type="text" value={formData.referenceNo} onChange={e => setFormData({ ...formData, referenceNo: e.target.value.toUpperCase() })} placeholder="e.g. M7X9L2" className="w-full font-black text-navy bg-transparent border-none p-0 focus:ring-0 uppercase" /></div>
-        </div>
-        <div className="bg-paper p-4 rounded-2xl-sticker border border-accent sticker-shadow space-y-4">
-          <div>
-            <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block flex items-center gap-1"><Link size={12} /> Link to Schedule</label>
-            <select value={formData.linkedScheduleId || ''} onChange={e => setFormData({ ...formData, linkedScheduleId: e.target.value })} className="w-full bg-cream border border-accent rounded-xl p-3 font-bold text-navy text-sm outline-none">
-              <option value="">-- No Link --</option>
-              {itinerary.map(item => <option key={item.id} value={item.id}>{item.dayIndex === -1 ? '(Pool)' : `Day ${item.dayIndex + 1}`} - {item.time} {item.location}</option>)}
+
+        {/* Scrollable Form Body */}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0">
+          {/* Ticket Image / Scan Area */}
+          <div 
+            className="w-full aspect-[21/9] bg-white rounded-2xl-sticker border-2 border-dashed border-accent flex flex-col items-center justify-center relative overflow-hidden cursor-pointer hover:border-stitch/50 transition-colors" 
+            onClick={() => document.getElementById('imageInput')?.click()}
+          >
+            {imagePreview ? (
+              <div className="relative w-full h-full">
+                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setImagePreview(''); }} 
+                  className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 transition-colors"
+                >
+                  <X size={14} />
+                </button>
+                {isScanning && (
+                  <div className="absolute inset-0 bg-navy/60 backdrop-blur-sm flex items-center justify-center text-white gap-2 text-xs font-black">
+                    <Wand2 className="animate-pulse text-stitch" />
+                    <span>AI 掃描票券中...</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-navy/30">
+                <Camera size={28} className="text-stitch mb-1" />
+                <p className="text-[10px] font-black uppercase tracking-wider">點擊上傳或拍照掃描票券</p>
+              </div>
+            )}
+            <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+          </div>
+
+          {/* Category Chips */}
+          <div className="bg-white p-3.5 rounded-2xl border border-accent">
+            <label className="text-[10px] font-black uppercase text-navy/40 mb-2 block tracking-wider">類別 Category</label>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+              {types.map(t => (
+                <button 
+                  key={t} 
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: t })} 
+                  className={`flex-shrink-0 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all border ${
+                    formData.type === t ? 'bg-navy border-navy text-white sticker-shadow scale-105' : 'bg-cream/60 border-accent/70 text-navy/60 hover:bg-cream'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Title & Ref No */}
+          <div className="bg-white p-3.5 rounded-2xl border border-accent space-y-3">
+            <div>
+              <label className="text-[10px] font-black uppercase text-navy/40 mb-1 block tracking-wider">項目名稱 (必填)</label>
+              <input 
+                autoFocus
+                type="text" 
+                value={formData.title} 
+                onChange={e => setFormData({ ...formData, title: e.target.value })} 
+                placeholder="例如：迪士尼電子門票、星宇航空登機證" 
+                className="w-full text-base font-black text-navy bg-transparent border-none p-0 focus:ring-0 placeholder:text-navy/20" 
+              />
+            </div>
+            <div className="pt-2.5 border-t border-accent/20">
+              <label className="text-[10px] font-black uppercase text-navy/40 mb-1 block tracking-wider">預約號碼 / 訂位代號</label>
+              <input 
+                type="text" 
+                value={formData.referenceNo} 
+                onChange={e => setFormData({ ...formData, referenceNo: e.target.value.toUpperCase() })} 
+                placeholder="例如：M7X9L2" 
+                className="w-full font-black text-sm text-navy bg-transparent border-none p-0 focus:ring-0 uppercase tracking-widest placeholder:text-navy/20" 
+              />
+            </div>
+          </div>
+
+          {/* Schedule Link */}
+          <div className="bg-white p-3.5 rounded-2xl border border-accent">
+            <label className="text-[10px] font-black uppercase text-navy/40 mb-1.5 block flex items-center gap-1">
+              <Link size={12} className="text-stitch" /> 關聯行程站點 (選填)
+            </label>
+            <select 
+              value={formData.linkedScheduleId || ''} 
+              onChange={e => setFormData({ ...formData, linkedScheduleId: e.target.value })} 
+              className="w-full bg-cream border border-accent rounded-xl p-2.5 font-bold text-navy text-xs outline-none cursor-pointer"
+            >
+              <option value="">-- 無關聯行程 --</option>
+              {itinerary.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.dayIndex === -1 ? '(靈感池)' : `Day ${item.dayIndex + 1}`} - {item.time} {item.location}
+                </option>
+              ))}
             </select>
           </div>
+        </div>
+
+        {/* Sticky Action Footer */}
+        <div className="pt-3 mt-3 border-t border-accent/40 flex items-center gap-2">
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="flex-1 py-3 bg-cream hover:bg-accent/30 text-navy/60 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
+          >
+            取消
+          </button>
+          <button 
+            type="button" 
+            onClick={() => onSave(formData as Booking)} 
+            disabled={!formData.title.trim()} 
+            className="flex-2 py-3 bg-stitch hover:bg-navy text-white font-black rounded-xl text-xs uppercase tracking-widest sticker-shadow active:translate-y-0.5 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5"
+          >
+            <Check size={16} />
+            <span>{initialData ? '儲存變更' : '確認新增'}</span>
+          </button>
         </div>
       </div>
     </div>

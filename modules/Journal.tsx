@@ -236,93 +236,116 @@ const JournalModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex flex-col bg-cream animate-in slide-in-from-bottom duration-300">
-      <div className="p-4 flex justify-between items-center border-b border-accent bg-paper">
-        <button onClick={onClose} className="text-navy/40 p-2 active:scale-90"><X size={24} /></button>
-        <h3 className="text-lg font-black text-navy uppercase tracking-widest">{initialData ? 'Edit Entry' : 'New Journal'}</h3>
-        <button 
-          onClick={handleDone} 
-          className="text-stitch font-black p-2 active:scale-90 disabled:opacity-30"
-          disabled={!content.trim()}
-        >
-          <Send size={24} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Post Composition */}
-        <div className="bg-paper p-5 rounded-3xl-sticker border border-accent sticker-shadow flex flex-col min-h-[180px]">
-          <textarea 
-            autoFocus
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Record a memory... #JapanTrip"
-            className="flex-1 w-full bg-transparent border-none focus:ring-0 p-0 text-navy placeholder:text-navy/20 text-lg leading-relaxed resize-none"
-          />
-        </div>
-
-        {/* Member Selection - Included in Edit/New View */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 px-1">
-             <UserCircle2 size={14} className="text-navy/30" />
-             <label className="text-[10px] font-black uppercase text-navy/30 tracking-widest">Post as</label>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {members.map((member) => (
-              <button
-                key={member.id}
-                onClick={() => setSelectedAuthorId(member.id)}
-                className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-full transition-all border-2 ${
-                  selectedAuthorId === member.id 
-                    ? 'bg-navy border-navy text-white sticker-shadow scale-105' 
-                    : 'bg-white border-accent text-navy opacity-60'
-                }`}
-              >
-                <div className="relative">
-                  <img src={member.avatar} alt={member.name} className="w-6 h-6 rounded-full object-cover border border-white/20" />
-                  {selectedAuthorId === member.id && (
-                    <div className="absolute -top-1 -right-1 bg-stitch rounded-full p-0.5 border border-white">
-                      <Check size={8} className="text-white" />
-                    </div>
-                  )}
-                </div>
-                <span className="text-[10px] font-black uppercase tracking-tight">{member.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Photo Upload */}
-        <div 
-          className="w-full aspect-[4/3] bg-white rounded-3xl-sticker border-2 border-dashed border-accent flex flex-col items-center justify-center sticker-shadow relative overflow-hidden group transition-all active:scale-95"
-          onClick={() => document.getElementById('imageInput')?.click()}
-        >
-          {imagePreview ? (
-            <>
-              <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                 <Camera className="text-white" size={32} />
-              </div>
-              <button 
-                onClick={(e) => { e.stopPropagation(); setImagePreview(''); }}
-                className="absolute top-2 right-2 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-red-500 shadow-lg"
-              >
-                <X size={16} />
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col items-center text-navy/20">
-              <Camera size={48} />
-              <p className="text-xs font-black mt-2 uppercase tracking-widest">Snap or Upload</p>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
+      <div 
+        className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex justify-between items-center pb-3 mb-3 border-b border-accent/40">
+          <div className="flex items-center gap-2">
+            <span className="p-2 bg-stitch/15 text-stitch rounded-xl font-bold">
+              <Camera size={18} />
+            </span>
+            <div>
+              <h3 className="text-base font-black text-navy uppercase tracking-wider">
+                {initialData ? '編輯旅行日記' : '新增旅行日記'}
+              </h3>
+              <p className="text-[10px] font-bold text-navy/40">記錄這趟旅程的美好點滴</p>
             </div>
-          )}
-          <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+          </div>
+          <button onClick={onClose} className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 hover:text-navy transition-colors">
+            <X size={18} />
+          </button>
         </div>
-      </div>
 
-      <div className="p-8 bg-paper border-t border-accent flex flex-col items-center justify-center gap-1">
-         <p className="text-[10px] font-black text-navy/20 uppercase tracking-[0.4em]">Stitch & Donald Adventure</p>
-         <div className="w-12 h-1 bg-accent/30 rounded-full" />
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0">
+          {/* Post Composition */}
+          <div className="bg-white p-4 rounded-2xl border border-accent sticker-shadow flex flex-col min-h-[140px]">
+            <label className="text-[10px] font-black uppercase text-navy/40 mb-1.5 block tracking-wider">日記心得 / 動態內容</label>
+            <textarea 
+              autoFocus
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="記錄這刻的心情、美味拉麵、拍下的美景... #TokyoTrip"
+              className="flex-1 w-full bg-transparent border-none focus:ring-0 p-0 text-navy placeholder:text-navy/20 text-sm leading-relaxed resize-none font-medium"
+            />
+          </div>
+
+          {/* Member Selection */}
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 px-0.5">
+               <UserCircle2 size={13} className="text-navy/40" />
+               <label className="text-[10px] font-black uppercase text-navy/40 tracking-wider">發佈身分 Post As</label>
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+              {members.map((member) => (
+                <button
+                  key={member.id}
+                  type="button"
+                  onClick={() => setSelectedAuthorId(member.id)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all border ${
+                    selectedAuthorId === member.id 
+                      ? 'bg-navy border-navy text-white sticker-shadow scale-105' 
+                      : 'bg-white border-accent text-navy/70 hover:bg-cream'
+                  }`}
+                >
+                  <img src={member.avatar} alt={member.name} className="w-5 h-5 rounded-full object-cover border border-white/40" />
+                  <span className="text-[10px] font-black uppercase tracking-tight">{member.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Photo Upload */}
+          <div 
+            className="w-full aspect-[16/9] bg-white rounded-2xl border-2 border-dashed border-accent flex flex-col items-center justify-center sticker-shadow relative overflow-hidden group cursor-pointer hover:border-stitch/50 transition-all active:scale-98"
+            onClick={() => document.getElementById('imageInput')?.click()}
+          >
+            {imagePreview ? (
+              <>
+                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                   <Camera className="text-white" size={28} />
+                </div>
+                <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setImagePreview(''); }}
+                  className="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-red-500 shadow-md hover:bg-red-500 hover:text-white transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center text-navy/30">
+                <Camera size={32} className="text-stitch mb-1" />
+                <p className="text-[10px] font-black uppercase tracking-wider">點擊上傳或拍攝照片</p>
+              </div>
+            )}
+            <input id="imageInput" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+          </div>
+        </div>
+
+        {/* Sticky Action Footer */}
+        <div className="pt-3 mt-3 border-t border-accent/40 flex items-center gap-2">
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="flex-1 py-3 bg-cream hover:bg-accent/30 text-navy/60 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
+          >
+            取消
+          </button>
+          <button 
+            type="button" 
+            onClick={handleDone} 
+            disabled={!content.trim()} 
+            className="flex-2 py-3 bg-stitch hover:bg-navy text-white font-black rounded-xl text-xs uppercase tracking-widest sticker-shadow active:translate-y-0.5 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5"
+          >
+            <Send size={15} />
+            <span>{initialData ? '儲存變更' : '發佈日記'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

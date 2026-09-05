@@ -781,8 +781,8 @@ const Expense: React.FC<ExpenseProps> = ({ currentUser, members, onOpenFullExpor
 
       {/* CSV Import Preview Modal */}
       {isImportModalOpen && importedPreview && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-navy/40 backdrop-blur-sm animate-in fade-in" onClick={() => setIsImportModalOpen(false)}>
-          <div className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[88vh] overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={() => setIsImportModalOpen(false)}>
+          <div className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex justify-between items-center pb-3 border-b border-accent/40 mb-3">
               <div className="flex items-center gap-2.5">
@@ -796,7 +796,7 @@ const Expense: React.FC<ExpenseProps> = ({ currentUser, members, onOpenFullExpor
                   </p>
                 </div>
               </div>
-              <button onClick={() => setIsImportModalOpen(false)} className="p-1.5 bg-cream rounded-full text-navy/40 hover:text-navy">
+              <button onClick={() => setIsImportModalOpen(false)} className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 hover:text-navy transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -936,23 +936,63 @@ const SettlementModal: React.FC<{ balances: Record<string, number>, displayCurre
    }, [balances]);
 
    return (
-     <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-navy/5 backdrop-blur-sm" onClick={onClose}>
-       <div className="bg-paper w-full max-w-sm rounded-3xl p-6 border-4 border-stitch/30 sticker-shadow animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-         <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-black text-navy uppercase tracking-widest">Settlement</h3><button onClick={onClose} className="p-2 bg-cream rounded-full text-navy/20"><X size={18} /></button></div>
-         <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 scrollbar-hide">
+     <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
+       <div 
+         className="bg-paper w-full max-w-sm rounded-3xl-sticker p-5 sm:p-6 border-4 border-stitch/30 sticker-shadow flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95" 
+         onClick={e => e.stopPropagation()}
+       >
+         {/* Header */}
+         <div className="flex justify-between items-center pb-3 mb-3 border-b border-accent/40">
+           <div>
+             <h3 className="text-base font-black text-navy uppercase tracking-wider">分帳結算建議</h3>
+             <p className="text-[10px] font-bold text-navy/40">最佳化轉帳路徑，輕鬆結清款項</p>
+           </div>
+           <button onClick={onClose} className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 hover:text-navy transition-colors">
+             <X size={18} />
+           </button>
+         </div>
+
+         {/* Scrollable Body */}
+         <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-0">
            {suggestions.length > 0 ? suggestions.map((t, idx) => (
-             <div key={idx} className="bg-white p-4 rounded-2xl border border-accent flex items-center justify-between hover:border-stitch/30 transition-colors">
+             <div key={idx} className="bg-white p-3.5 rounded-2xl border border-accent flex items-center justify-between hover:border-stitch/30 transition-colors shadow-xs">
                <div className="flex items-center gap-2">
-                 <div className="relative"><img src={members.find(m => m.id === t.from)?.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm" /><div className="absolute -bottom-1 -right-1 bg-red-400 w-3 h-3 rounded-full border border-white" /></div>
-                 <ArrowRight size={14} className="text-navy/20 mx-1" />
-                 <div className="relative"><img src={members.find(m => m.id === t.to)?.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm" /><div className="absolute -bottom-1 -right-1 bg-green-400 w-3 h-3 rounded-full border border-white" /></div>
+                 <div className="relative">
+                   <img src={members.find(m => m.id === t.from)?.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm object-cover" alt="" />
+                   <div className="absolute -bottom-1 -right-1 bg-red-400 w-3 h-3 rounded-full border border-white" />
+                 </div>
+                 <ArrowRight size={14} className="text-navy/30 mx-1 shrink-0" />
+                 <div className="relative">
+                   <img src={members.find(m => m.id === t.to)?.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm object-cover" alt="" />
+                   <div className="absolute -bottom-1 -right-1 bg-green-400 w-3 h-3 rounded-full border border-white" />
+                 </div>
                </div>
                <div className="text-right">
-                 <p className="font-black text-navy text-sm tabular-nums">{displayCurrency} {Math.round(convert(t.amount, 'JPY', displayCurrency)).toLocaleString()}</p>
-                 <p className="text-[9px] font-bold text-navy/30 uppercase">{members.find(m => m.id === t.from)?.name} → {members.find(m => m.id === t.to)?.name}</p>
+                 <p className="font-black text-navy text-sm tabular-nums">
+                   {displayCurrency} {Math.round(convert(t.amount, 'JPY', displayCurrency)).toLocaleString()}
+                 </p>
+                 <p className="text-[9px] font-bold text-navy/40 uppercase">
+                   {members.find(m => m.id === t.from)?.name} → {members.find(m => m.id === t.to)?.name}
+                 </p>
                </div>
              </div>
-           )) : <p className="text-center py-10 text-xs font-black text-navy/20 uppercase tracking-widest">All Ohana settled up! 🤙</p>}
+           )) : (
+             <div className="text-center py-12">
+               <p className="text-2xl mb-1">🤙</p>
+               <p className="text-xs font-black text-navy/40 uppercase tracking-wider">全員帳目已平，無需轉帳！</p>
+             </div>
+           )}
+         </div>
+
+         {/* Action Footer */}
+         <div className="pt-3 mt-3 border-t border-accent/40">
+           <button 
+             type="button" 
+             onClick={onClose} 
+             className="w-full py-3 bg-stitch hover:bg-navy text-white font-black rounded-xl text-xs uppercase tracking-widest sticker-shadow active:translate-y-0.5 transition-all"
+           >
+             關閉
+           </button>
          </div>
        </div>
      </div>
@@ -1050,28 +1090,32 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
   const perPersonAmount = Math.round((formData.amount || 0) / splitCount);
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-navy/30 backdrop-blur-xs" onClick={onClose}>
-      <div className="bg-paper w-full max-w-lg rounded-3xl p-6 sticker-shadow border-t-4 border-stitch animate-in zoom-in-95 overflow-y-auto max-h-[92vh]" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-4 bg-navy/40 backdrop-blur-xs animate-in fade-in" onClick={onClose}>
+      <div 
+        className="bg-paper w-full max-w-md rounded-3xl-sticker p-5 sm:p-6 sticker-shadow border-4 border-stitch/30 flex flex-col max-h-[82vh] my-auto overflow-hidden animate-in zoom-in-95" 
+        onClick={e => e.stopPropagation()}
+      >
         
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4">
+        {/* Header (Pinned) */}
+        <div className="flex justify-between items-center pb-3 mb-3 border-b border-accent/40">
           <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-stitch/10 text-stitch rounded-xl">
+            <span className="p-2 bg-stitch/15 text-stitch rounded-xl font-bold">
               <Zap size={18} />
             </span>
             <div>
               <h3 className="text-base font-black text-navy uppercase tracking-wider">
-                {expense?.id ? '編輯花費 Record' : '快速記帳 Fast Log'}
+                {expense?.id ? '編輯支出紀錄' : '快速記帳 Fast Log'}
               </h3>
-              <p className="text-[9px] font-bold text-navy/40">點擊標籤快速帶入，點擊按鈕快速加減金額</p>
+              <p className="text-[10px] font-bold text-navy/40">點擊標籤快速填寫，自動計算每人分攤</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 bg-cream hover:bg-accent rounded-full text-navy/40 transition-colors">
+          <button onClick={onClose} className="p-2 bg-cream hover:bg-accent/40 rounded-full text-navy/40 hover:text-navy transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="space-y-4">
+        {/* Scrollable Form Body */}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 min-h-0">
           {/* Quick Preset Chips Row */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -1299,16 +1343,25 @@ const ExpenseModal: React.FC<{ expense: ExpenseType | null; members: TripMember[
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Submit Action Button */}
+        {/* Sticky Action Footer (Always visible, comfortable distance from bottom) */}
+        <div className="pt-3 mt-3 border-t border-accent/40 flex items-center gap-2">
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="flex-1 py-3 bg-cream hover:bg-accent/30 text-navy/60 font-black rounded-xl text-xs uppercase tracking-wider transition-colors"
+          >
+            取消
+          </button>
           <button 
             type="button"
             onClick={() => onSave(formData as ExpenseType)} 
             disabled={!formData.title || !formData.amount} 
-            className="w-full py-4 bg-stitch hover:bg-navy text-white font-black rounded-2xl-sticker uppercase text-xs tracking-[0.2em] mt-2 sticker-shadow active:translate-y-0.5 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
+            className="flex-2 py-3 bg-stitch hover:bg-navy text-white font-black rounded-xl text-xs uppercase tracking-widest sticker-shadow active:translate-y-0.5 transition-all disabled:opacity-30 flex items-center justify-center gap-1.5"
           >
             <Check size={16} />
-            {expense?.id ? '更新記錄 UPDATE' : '儲存記帳 SAVE EXPENSE'}
+            <span>{expense?.id ? '更新紀錄' : '儲存記帳'}</span>
           </button>
         </div>
       </div>
